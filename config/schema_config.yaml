@@ -1,0 +1,41 @@
+table_name: application_train
+strict_schema:
+  required_columns:
+    - SK_ID_CURR
+    - TARGET
+    - NAME_CONTRACT_TYPE
+    - CODE_GENDER
+    - AMT_INCOME_TOTAL
+  columns:
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    TARGET:
+      type: int
+      nullable: false
+    NAME_CONTRACT_TYPE:
+      type: string
+      nullable: true
+    CODE_GENDER:
+      type: string
+      nullable: true
+    AMT_INCOME_TOTAL:
+      type: float
+      nullable: true
+    AMT_CREDIT:
+      type: float
+      nullable: true
+    DAYS_BIRTH:
+      type: int
+      nullable: true
+    DAYS_EMPLOYED:
+      type: int
+      nullable: true
+    FLAG_OWN_CAR:
+      type: string
+      nullable: true
+    FLAG_OWN_REALTY:
+      type: string
+      nullable: true
+  primary_key:
+    - SK_ID_CURR

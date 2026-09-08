@@ -1,0 +1,10 @@
+polars
+duckdb
+pyarrow
+pydantic
+numpy
+pandas
+pytest
+pyyaml
+pydantic-ai
+python-dotenv

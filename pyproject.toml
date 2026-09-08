@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "risk-data-engine"
+version = "0.1.0"
+description = "High-scale risk data engine for portfolio analytics"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "polars",
+    "duckdb",
+    "pyarrow",
+    "pydantic",
+    "numpy",
+    "pandas",
+    "pytest",
+    "pyyaml",
+    "pydantic-ai",
+    "python-dotenv",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
