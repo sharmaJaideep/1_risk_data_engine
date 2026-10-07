@@ -85,6 +85,8 @@ def build_master_analytical_record(data_dir: str = "data/processed") -> None:
 
     # Level-1: bureau (accounts) aggregated by SK_ID_CURR incorporating Level-2
     if bureau_fp.exists():
+        bb_delinquent = "SUM(COALESCE(bb.bb_delinquent_months, 0))" if bureau_balance_fp.exists() else "0"
+        bb_join = "LEFT JOIN (SELECT * FROM bureau_balance_lv2) bb ON b.SK_ID_BUREAU = bb.SK_ID_BUREAU" if bureau_balance_fp.exists() else ""
         sql_bu = f"""
         CREATE TEMP VIEW bureau_lv1 AS
         SELECT
@@ -95,9 +97,9 @@ def build_master_analytical_record(data_dir: str = "data/processed") -> None:
             SUM(COALESCE(b.AMT_CREDIT_SUM_DEBT, 0)) AS bureau_sum_credit_sum_debt,
             SUM(COALESCE(b.AMT_CREDIT_SUM, 0)) AS bureau_sum_credit_sum,
             SUM(COALESCE(b.AMT_CREDIT_SUM_OVERDUE, 0)) AS bureau_total_overdue_balance,
-            SUM(COALESCE(bb.bb_delinquent_months, 0)) AS bureau_total_delinquent_months
+            {bb_delinquent} AS bureau_total_delinquent_months
         FROM read_parquet('{_safe_parquet(str(bureau_fp))}') b
-        LEFT JOIN (SELECT * FROM bureau_balance_lv2) bb ON b.SK_ID_BUREAU = bb.SK_ID_BUREAU
+        {bb_join}
         GROUP BY b.SK_ID_CURR;
         """
         conn.execute(sql_bu)
@@ -155,8 +157,14 @@ def build_master_analytical_record(data_dir: str = "data/processed") -> None:
         ]
     }
 
-    for cols in aggs.values():
-        select_cols.extend(cols)
+    available = {
+        'bureau_lv1': bureau_fp.exists(),
+        'installments_lv2': installments_fp.exists(),
+        'previous_lv1': previous_fp.exists(),
+    }
+    for name, cols in aggs.items():
+        if available[name]:
+            select_cols.extend(cols)
 
     select_sql = f"SELECT {', '.join(select_cols)} FROM read_parquet('{_safe_parquet(str(app_fp))}') a"
 
