@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import polars as pl
 
@@ -23,6 +23,7 @@ VINTAGE_MOB = 12
 VINTAGE_MIN_ACCOUNTS = 1000
 VINTAGE_TRAILING = 4
 VINTAGE_WORSENING_RATIO = 1.25
+VINTAGE_MIN_BAD = 30  # below this many bad accounts in the latest cohort, a ratio is just noise
 
 _SEVERITY = {"ok": 0, "warning": 1, "critical": 2}
 _DPD_BUCKETS = ("DPD_1_30", "DPD_31_60", "DPD_61_90", "DPD_91_120", "DPD_120_PLUS")
@@ -140,10 +141,37 @@ class DiagnosticAgent:
             return "warning", findings, ["Review schema warnings and update config/schemas/ if the change is intended"]
         return "ok", findings, []
 
+    @staticmethod
+    def _per_source(
+        path: Path, missing_msg: str, check: Callable[[pl.DataFrame, str], tuple[str, list[str], list[str]]]
+    ) -> tuple[str, list[str], list[str]]:
+        """Run `check` on each source's rows (files without a `source` column are treated as bureau)."""
+        if not path.exists():
+            return "ok", [missing_msg], []
+        frame = pl.read_parquet(path)
+        if "source" not in frame.columns:
+            frame = frame.with_columns(pl.lit("bureau").alias("source"))
+        severity, findings, recs = "ok", [], []
+        for source in frame["source"].unique(maintain_order=True):
+            sev, f, r = check(frame.filter(pl.col("source") == source), source)
+            findings += [f"[{source}] {line}" for line in f]
+            recs += [x for x in r if x not in recs]
+            if _SEVERITY[sev] > _SEVERITY[severity]:
+                severity = sev
+        return severity, findings, recs
+
     def _check_roll_rates(self) -> tuple[str, list[str], list[str]]:
-        if not self.roll_rate_path.exists():
-            return "ok", ["Roll-rate matrix not found; skipped (run the `vintage` step)"], []
-        rr = pl.read_parquet(self.roll_rate_path)
+        return self._per_source(
+            self.roll_rate_path, "Roll-rate matrix not found; skipped (run the `vintage` step)", self._roll_rates_for
+        )
+
+    def _check_vintage(self) -> tuple[str, list[str], list[str]]:
+        return self._per_source(
+            self.vintage_path, "Vintage curves not found; skipped (run the `vintage` step)", self._vintage_for
+        )
+
+    @staticmethod
+    def _roll_rates_for(rr: pl.DataFrame, source: str) -> tuple[str, list[str], list[str]]:
 
         def share(from_bucket: str, to_buckets: tuple[str, ...]) -> float:
             sel = rr.filter(pl.col("from_bucket") == from_bucket)
@@ -167,16 +195,15 @@ class DiagnosticAgent:
             recs.append("Strengthen early-stage collections: early delinquents are not curing")
         return severity, findings, recs
 
-    def _check_vintage(self) -> tuple[str, list[str], list[str]]:
-        if not self.vintage_path.exists():
-            return "ok", ["Vintage curves not found; skipped (run the `vintage` step)"], []
-        v = pl.read_parquet(self.vintage_path).filter(
-            (pl.col("mob") == VINTAGE_MOB) & (pl.col("accounts_observed") >= VINTAGE_MIN_ACCOUNTS)
-        )
+    @staticmethod
+    def _vintage_for(curves: pl.DataFrame, source: str) -> tuple[str, list[str], list[str]]:
         # The oldest cohort absorbs accounts truncated by the 96-month history window; exclude it.
-        if v.height:
-            v = v.filter(pl.col("cohort_start_month") > v["cohort_start_month"].min())
-        v = v.sort("cohort_start_month")
+        oldest = curves["cohort_start_month"].min()
+        v = curves.filter(
+            (pl.col("mob") == VINTAGE_MOB)
+            & (pl.col("accounts_observed") >= VINTAGE_MIN_ACCOUNTS)
+            & (pl.col("cohort_start_month") > oldest)
+        ).sort("cohort_start_month")
         if v.height <= VINTAGE_TRAILING:
             return "ok", [f"Too few cohorts with MOB {VINTAGE_MOB} data for a vintage trend check"], []
 
@@ -188,6 +215,8 @@ class DiagnosticAgent:
             f"Vintage: cohort starting month {latest['cohort_start_month']} has a {rate:.2%} cumulative bad rate "
             f"at MOB {VINTAGE_MOB} vs {trailing:.2%} for the prior {VINTAGE_TRAILING} cohorts ({ratio:.2f}x)"
         )
+        if ratio > VINTAGE_WORSENING_RATIO and latest["accounts_bad"] < VINTAGE_MIN_BAD:
+            return "ok", [finding + f" - not flagged: only {latest['accounts_bad']} bad accounts"], []
         if ratio > VINTAGE_WORSENING_RATIO:
             return (
                 "warning",

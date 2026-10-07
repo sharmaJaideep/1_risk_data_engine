@@ -61,7 +61,7 @@ Project layout (high level):
     - `converter.py` — `polars` CSV -> Parquet converter.
   - `src/metrics/` — PSI/CSI, vintage, and roll-rate computations.
     - `stability.py` — PSI/CSI algorithms.
-    - `vintage.py` — Vintage and roll-rate helpers.
+    - `vintage.py` — Roll-rate and vintage analysis for bureau, credit card and POS cash accounts.
   - `src/db/` — DuckDB connector and zero-copy helpers.
     - `duckdb_engine.py` — Simple DuckDB connection wrapper.
   - `src/agents/` — Agentic diagnostic components.

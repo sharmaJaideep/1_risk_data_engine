@@ -46,14 +46,43 @@ def test_high_roll_in_escalates_to_warning(tmp_path):
     assert any("roll-in" in f for f in report.findings)
 
 
-def test_worsening_vintage_flagged(tmp_path):
-    stability = _write(tmp_path, [("A", 0.01, "STABLE")])
+def _vintage(tmp_path, latest_bad, source=None):
     rates = [0.01, 0.01, 0.01, 0.01, 0.01, 0.03]
-    rows = [(-96 + 3 * i, 12, 5000, r) for i, r in enumerate([0.05] + rates)]
-    vint = tmp_path / "v.parquet"
-    pl.DataFrame(rows, schema=["cohort_start_month", "mob", "accounts_observed", "cumulative_bad_rate"], orient="row").write_parquet(vint)
-    report = DiagnosticAgent(
-        report_path=stability, roll_rate_path=tmp_path / "none", vintage_path=vint, use_llm=False
-    ).run()
+    rows = [(-96 + 3 * i, 12, 5000, latest_bad if i == 6 else 50, r) for i, r in enumerate([0.05] + rates)]
+    cols = ["cohort_start_month", "mob", "accounts_observed", "accounts_bad", "cumulative_bad_rate"]
+    if source:
+        rows = [(source, *r) for r in rows]
+        cols = ["source", *cols]
+    path = tmp_path / "v.parquet"
+    pl.DataFrame(rows, schema=cols, orient="row").write_parquet(path)
+    return path
+
+
+def _agent(tmp_path, vint):
+    stability = _write(tmp_path, [("A", 0.01, "STABLE")])
+    return DiagnosticAgent(report_path=stability, roll_rate_path=tmp_path / "none", vintage_path=vint, use_llm=False)
+
+
+def test_worsening_vintage_flagged(tmp_path):
+    report = _agent(tmp_path, _vintage(tmp_path, latest_bad=150)).run()
     assert report.status == "warning"
     assert any("worsening" in f for f in report.findings)
+
+
+def test_worsening_vintage_with_too_few_bad_accounts_not_flagged(tmp_path):
+    report = _agent(tmp_path, _vintage(tmp_path, latest_bad=10)).run()
+    assert report.status == "ok"
+    assert any("not flagged" in f for f in report.findings)
+
+
+def test_checks_run_per_source(tmp_path):
+    cols = ["source", "cohort_start_month", "mob", "accounts_observed", "accounts_bad", "cumulative_bad_rate"]
+    rows = []
+    for source, last_rate in (("credit_card", 0.03), ("pos_cash", 0.01)):  # only credit_card worsens
+        rates = [0.05, 0.01, 0.01, 0.01, 0.01, 0.01, last_rate]
+        rows += [(source, -96 + 3 * i, 12, 5000, 150, r) for i, r in enumerate(rates)]
+    path = tmp_path / "v.parquet"
+    pl.DataFrame(rows, schema=cols, orient="row").write_parquet(path)
+    report = _agent(tmp_path, path).run()
+    assert any(f.startswith("[credit_card]") and "worsening" in f for f in report.findings)
+    assert any(f.startswith("[pos_cash]") and "worsening" not in f for f in report.findings)
