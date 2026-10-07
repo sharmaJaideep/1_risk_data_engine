@@ -1,0 +1,67 @@
+table_name: bureau
+strict_schema:
+  required_columns:
+  - SK_ID_CURR
+  - SK_ID_BUREAU
+  - CREDIT_ACTIVE
+  - CREDIT_CURRENCY
+  - DAYS_CREDIT
+  - CREDIT_DAY_OVERDUE
+  - CNT_CREDIT_PROLONG
+  - AMT_CREDIT_SUM_OVERDUE
+  - CREDIT_TYPE
+  - DAYS_CREDIT_UPDATE
+  columns:
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    SK_ID_BUREAU:
+      type: int
+      nullable: false
+    CREDIT_ACTIVE:
+      type: string
+      nullable: false
+    CREDIT_CURRENCY:
+      type: string
+      nullable: false
+    DAYS_CREDIT:
+      type: int
+      nullable: false
+    CREDIT_DAY_OVERDUE:
+      type: int
+      nullable: false
+    DAYS_CREDIT_ENDDATE:
+      type: float
+      nullable: true
+    DAYS_ENDDATE_FACT:
+      type: float
+      nullable: true
+    AMT_CREDIT_MAX_OVERDUE:
+      type: float
+      nullable: true
+    CNT_CREDIT_PROLONG:
+      type: int
+      nullable: false
+    AMT_CREDIT_SUM:
+      type: float
+      nullable: true
+    AMT_CREDIT_SUM_DEBT:
+      type: float
+      nullable: true
+    AMT_CREDIT_SUM_LIMIT:
+      type: float
+      nullable: true
+    AMT_CREDIT_SUM_OVERDUE:
+      type: float
+      nullable: false
+    CREDIT_TYPE:
+      type: string
+      nullable: false
+    DAYS_CREDIT_UPDATE:
+      type: int
+      nullable: false
+    AMT_ANNUITY:
+      type: float
+      nullable: true
+  primary_key:
+  - SK_ID_BUREAU

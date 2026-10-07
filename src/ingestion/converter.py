@@ -41,7 +41,8 @@ class CsvToParquetConverter:
         # a permissive fallback encoding (latin1) and let convert_all handle
         # skipping on persistent failures.
         try:
-            lazy_frame = pl.scan_csv(csv_path)
+            # Full-file inference: the default 100-row sample types sparse columns (e.g. bureau.AMT_ANNUITY) as String.
+            lazy_frame = pl.scan_csv(csv_path, infer_schema_length=None)
             lazy_frame.sink_parquet(output_path, compression=self.compression)
         except Exception as exc:
             err_str = str(exc).lower()

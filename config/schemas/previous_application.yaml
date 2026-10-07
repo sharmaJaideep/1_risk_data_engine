@@ -1,0 +1,138 @@
+table_name: previous_application
+strict_schema:
+  required_columns:
+  - SK_ID_PREV
+  - SK_ID_CURR
+  - NAME_CONTRACT_TYPE
+  - AMT_APPLICATION
+  - WEEKDAY_APPR_PROCESS_START
+  - HOUR_APPR_PROCESS_START
+  - FLAG_LAST_APPL_PER_CONTRACT
+  - NFLAG_LAST_APPL_IN_DAY
+  - NAME_CASH_LOAN_PURPOSE
+  - NAME_CONTRACT_STATUS
+  - DAYS_DECISION
+  - NAME_PAYMENT_TYPE
+  - CODE_REJECT_REASON
+  - NAME_CLIENT_TYPE
+  - NAME_GOODS_CATEGORY
+  - NAME_PORTFOLIO
+  - NAME_PRODUCT_TYPE
+  - CHANNEL_TYPE
+  - SELLERPLACE_AREA
+  - NAME_SELLER_INDUSTRY
+  - NAME_YIELD_GROUP
+  columns:
+    SK_ID_PREV:
+      type: int
+      nullable: false
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    NAME_CONTRACT_TYPE:
+      type: string
+      nullable: false
+    AMT_ANNUITY:
+      type: float
+      nullable: true
+    AMT_APPLICATION:
+      type: float
+      nullable: false
+    AMT_CREDIT:
+      type: float
+      nullable: true
+    AMT_DOWN_PAYMENT:
+      type: float
+      nullable: true
+    AMT_GOODS_PRICE:
+      type: float
+      nullable: true
+    WEEKDAY_APPR_PROCESS_START:
+      type: string
+      nullable: false
+    HOUR_APPR_PROCESS_START:
+      type: int
+      nullable: false
+    FLAG_LAST_APPL_PER_CONTRACT:
+      type: string
+      nullable: false
+    NFLAG_LAST_APPL_IN_DAY:
+      type: int
+      nullable: false
+    RATE_DOWN_PAYMENT:
+      type: float
+      nullable: true
+    RATE_INTEREST_PRIMARY:
+      type: float
+      nullable: true
+    RATE_INTEREST_PRIVILEGED:
+      type: float
+      nullable: true
+    NAME_CASH_LOAN_PURPOSE:
+      type: string
+      nullable: false
+    NAME_CONTRACT_STATUS:
+      type: string
+      nullable: false
+    DAYS_DECISION:
+      type: int
+      nullable: false
+    NAME_PAYMENT_TYPE:
+      type: string
+      nullable: false
+    CODE_REJECT_REASON:
+      type: string
+      nullable: false
+    NAME_TYPE_SUITE:
+      type: string
+      nullable: true
+    NAME_CLIENT_TYPE:
+      type: string
+      nullable: false
+    NAME_GOODS_CATEGORY:
+      type: string
+      nullable: false
+    NAME_PORTFOLIO:
+      type: string
+      nullable: false
+    NAME_PRODUCT_TYPE:
+      type: string
+      nullable: false
+    CHANNEL_TYPE:
+      type: string
+      nullable: false
+    SELLERPLACE_AREA:
+      type: int
+      nullable: false
+    NAME_SELLER_INDUSTRY:
+      type: string
+      nullable: false
+    CNT_PAYMENT:
+      type: float
+      nullable: true
+    NAME_YIELD_GROUP:
+      type: string
+      nullable: false
+    PRODUCT_COMBINATION:
+      type: string
+      nullable: true
+    DAYS_FIRST_DRAWING:
+      type: float
+      nullable: true
+    DAYS_FIRST_DUE:
+      type: float
+      nullable: true
+    DAYS_LAST_DUE_1ST_VERSION:
+      type: float
+      nullable: true
+    DAYS_LAST_DUE:
+      type: float
+      nullable: true
+    DAYS_TERMINATION:
+      type: float
+      nullable: true
+    NFLAG_INSURED_ON_APPROVAL:
+      type: float
+      nullable: true
+  primary_key:
+  - SK_ID_PREV

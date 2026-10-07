@@ -2,9 +2,10 @@ import time
 import logging
 from typing import Tuple, List
 
-import duckdb
 import numpy as np
 import polars as pl
+
+from src.db.duckdb_engine import DuckDBEngine
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -110,8 +111,8 @@ def calculate_portfolio_stability(data_path: str) -> pl.DataFrame:
     """
     # Use DuckDB to validate record count quickly
     try:
-        con = duckdb.connect(database=':memory:')
-        count = con.execute(f"SELECT COUNT(*) as cnt FROM read_parquet('{data_path}')").fetchdf()['cnt'].iloc[0]
+        with DuckDBEngine(":memory:") as engine:
+            count = engine.query(f"SELECT COUNT(*) AS cnt FROM read_parquet('{data_path}')")["cnt"][0]
         logger.info("DuckDB record count: %d", int(count))
     except Exception:
         logger.warning("DuckDB count failed, proceeding with Polars read")
@@ -145,7 +146,10 @@ def calculate_portfolio_stability(data_path: str) -> pl.DataFrame:
     candidate_cols.extend(numeric_cols)
 
     # deduplicate and keep those actually present
-    candidate_cols = [c for c in dict.fromkeys(candidate_cols) if c in df.columns]
+    # identifiers and the target are not meaningful drift features
+    candidate_cols = [
+        c for c in dict.fromkeys(candidate_cols) if c in df.columns and not c.startswith('SK_ID') and c != 'TARGET'
+    ]
 
     baseline, target = split_cohorts(df)
 

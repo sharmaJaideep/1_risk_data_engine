@@ -1,0 +1,37 @@
+table_name: POS_CASH_balance
+strict_schema:
+  required_columns:
+  - SK_ID_PREV
+  - SK_ID_CURR
+  - MONTHS_BALANCE
+  - NAME_CONTRACT_STATUS
+  - SK_DPD
+  - SK_DPD_DEF
+  columns:
+    SK_ID_PREV:
+      type: int
+      nullable: false
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    MONTHS_BALANCE:
+      type: int
+      nullable: false
+    CNT_INSTALMENT:
+      type: float
+      nullable: true
+    CNT_INSTALMENT_FUTURE:
+      type: float
+      nullable: true
+    NAME_CONTRACT_STATUS:
+      type: string
+      nullable: false
+    SK_DPD:
+      type: int
+      nullable: false
+    SK_DPD_DEF:
+      type: int
+      nullable: false
+  primary_key:
+  - SK_ID_PREV
+  - MONTHS_BALANCE

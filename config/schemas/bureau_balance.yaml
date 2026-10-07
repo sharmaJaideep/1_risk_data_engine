@@ -1,0 +1,19 @@
+table_name: bureau_balance
+strict_schema:
+  required_columns:
+  - SK_ID_BUREAU
+  - MONTHS_BALANCE
+  - STATUS
+  columns:
+    SK_ID_BUREAU:
+      type: int
+      nullable: false
+    MONTHS_BALANCE:
+      type: int
+      nullable: false
+    STATUS:
+      type: string
+      nullable: false
+  primary_key:
+  - SK_ID_BUREAU
+  - MONTHS_BALANCE

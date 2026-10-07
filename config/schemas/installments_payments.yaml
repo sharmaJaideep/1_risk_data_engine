@@ -1,0 +1,35 @@
+table_name: installments_payments
+strict_schema:
+  required_columns:
+  - SK_ID_PREV
+  - SK_ID_CURR
+  - NUM_INSTALMENT_VERSION
+  - NUM_INSTALMENT_NUMBER
+  - DAYS_INSTALMENT
+  - AMT_INSTALMENT
+  columns:
+    SK_ID_PREV:
+      type: int
+      nullable: false
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    NUM_INSTALMENT_VERSION:
+      type: float
+      nullable: false
+    NUM_INSTALMENT_NUMBER:
+      type: int
+      nullable: false
+    DAYS_INSTALMENT:
+      type: float
+      nullable: false
+    DAYS_ENTRY_PAYMENT:
+      type: float
+      nullable: true
+    AMT_INSTALMENT:
+      type: float
+      nullable: false
+    AMT_PAYMENT:
+      type: float
+      nullable: true
+  primary_key: []  # no natural key: (SK_ID_PREV, NUM_INSTALMENT_NUMBER, NUM_INSTALMENT_VERSION) has duplicates

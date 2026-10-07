@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import List
 
-import duckdb
+from src.db.duckdb_engine import DuckDBEngine
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -32,7 +32,7 @@ def build_master_analytical_record(data_dir: str = "data/processed") -> None:
     - data_dir: location of processed parquet files
     """
     data_dir = Path(data_dir)
-    conn = duckdb.connect(database=":memory:")
+    conn = DuckDBEngine(":memory:")
 
     # File paths
     app_fp = data_dir / "application_train.parquet"

@@ -1,0 +1,426 @@
+table_name: application_test
+strict_schema:
+  required_columns:
+  - SK_ID_CURR
+  - NAME_CONTRACT_TYPE
+  - CODE_GENDER
+  - FLAG_OWN_CAR
+  - FLAG_OWN_REALTY
+  - CNT_CHILDREN
+  - AMT_INCOME_TOTAL
+  - AMT_CREDIT
+  - AMT_GOODS_PRICE
+  - NAME_INCOME_TYPE
+  - NAME_EDUCATION_TYPE
+  - NAME_FAMILY_STATUS
+  - NAME_HOUSING_TYPE
+  - REGION_POPULATION_RELATIVE
+  - DAYS_BIRTH
+  - DAYS_EMPLOYED
+  - DAYS_REGISTRATION
+  - DAYS_ID_PUBLISH
+  - FLAG_MOBIL
+  - FLAG_EMP_PHONE
+  - FLAG_WORK_PHONE
+  - FLAG_CONT_MOBILE
+  - FLAG_PHONE
+  - FLAG_EMAIL
+  - CNT_FAM_MEMBERS
+  - REGION_RATING_CLIENT
+  - REGION_RATING_CLIENT_W_CITY
+  - WEEKDAY_APPR_PROCESS_START
+  - HOUR_APPR_PROCESS_START
+  - REG_REGION_NOT_LIVE_REGION
+  - REG_REGION_NOT_WORK_REGION
+  - LIVE_REGION_NOT_WORK_REGION
+  - REG_CITY_NOT_LIVE_CITY
+  - REG_CITY_NOT_WORK_CITY
+  - LIVE_CITY_NOT_WORK_CITY
+  - ORGANIZATION_TYPE
+  - DAYS_LAST_PHONE_CHANGE
+  - FLAG_DOCUMENT_2
+  - FLAG_DOCUMENT_3
+  - FLAG_DOCUMENT_4
+  - FLAG_DOCUMENT_5
+  - FLAG_DOCUMENT_6
+  - FLAG_DOCUMENT_7
+  - FLAG_DOCUMENT_8
+  - FLAG_DOCUMENT_9
+  - FLAG_DOCUMENT_10
+  - FLAG_DOCUMENT_11
+  - FLAG_DOCUMENT_12
+  - FLAG_DOCUMENT_13
+  - FLAG_DOCUMENT_14
+  - FLAG_DOCUMENT_15
+  - FLAG_DOCUMENT_16
+  - FLAG_DOCUMENT_17
+  - FLAG_DOCUMENT_18
+  - FLAG_DOCUMENT_19
+  - FLAG_DOCUMENT_20
+  - FLAG_DOCUMENT_21
+  columns:
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    NAME_CONTRACT_TYPE:
+      type: string
+      nullable: false
+    CODE_GENDER:
+      type: string
+      nullable: false
+    FLAG_OWN_CAR:
+      type: string
+      nullable: false
+    FLAG_OWN_REALTY:
+      type: string
+      nullable: false
+    CNT_CHILDREN:
+      type: int
+      nullable: false
+    AMT_INCOME_TOTAL:
+      type: float
+      nullable: false
+    AMT_CREDIT:
+      type: float
+      nullable: false
+    AMT_ANNUITY:
+      type: float
+      nullable: true
+    AMT_GOODS_PRICE:
+      type: float
+      nullable: false
+    NAME_TYPE_SUITE:
+      type: string
+      nullable: true
+    NAME_INCOME_TYPE:
+      type: string
+      nullable: false
+    NAME_EDUCATION_TYPE:
+      type: string
+      nullable: false
+    NAME_FAMILY_STATUS:
+      type: string
+      nullable: false
+    NAME_HOUSING_TYPE:
+      type: string
+      nullable: false
+    REGION_POPULATION_RELATIVE:
+      type: float
+      nullable: false
+    DAYS_BIRTH:
+      type: int
+      nullable: false
+    DAYS_EMPLOYED:
+      type: int
+      nullable: false
+    DAYS_REGISTRATION:
+      type: float
+      nullable: false
+    DAYS_ID_PUBLISH:
+      type: int
+      nullable: false
+    OWN_CAR_AGE:
+      type: float
+      nullable: true
+    FLAG_MOBIL:
+      type: int
+      nullable: false
+    FLAG_EMP_PHONE:
+      type: int
+      nullable: false
+    FLAG_WORK_PHONE:
+      type: int
+      nullable: false
+    FLAG_CONT_MOBILE:
+      type: int
+      nullable: false
+    FLAG_PHONE:
+      type: int
+      nullable: false
+    FLAG_EMAIL:
+      type: int
+      nullable: false
+    OCCUPATION_TYPE:
+      type: string
+      nullable: true
+    CNT_FAM_MEMBERS:
+      type: float
+      nullable: false
+    REGION_RATING_CLIENT:
+      type: int
+      nullable: false
+    REGION_RATING_CLIENT_W_CITY:
+      type: int
+      nullable: false
+    WEEKDAY_APPR_PROCESS_START:
+      type: string
+      nullable: false
+    HOUR_APPR_PROCESS_START:
+      type: int
+      nullable: false
+    REG_REGION_NOT_LIVE_REGION:
+      type: int
+      nullable: false
+    REG_REGION_NOT_WORK_REGION:
+      type: int
+      nullable: false
+    LIVE_REGION_NOT_WORK_REGION:
+      type: int
+      nullable: false
+    REG_CITY_NOT_LIVE_CITY:
+      type: int
+      nullable: false
+    REG_CITY_NOT_WORK_CITY:
+      type: int
+      nullable: false
+    LIVE_CITY_NOT_WORK_CITY:
+      type: int
+      nullable: false
+    ORGANIZATION_TYPE:
+      type: string
+      nullable: false
+    EXT_SOURCE_1:
+      type: float
+      nullable: true
+    EXT_SOURCE_2:
+      type: float
+      nullable: true
+    EXT_SOURCE_3:
+      type: float
+      nullable: true
+    APARTMENTS_AVG:
+      type: float
+      nullable: true
+    BASEMENTAREA_AVG:
+      type: float
+      nullable: true
+    YEARS_BEGINEXPLUATATION_AVG:
+      type: float
+      nullable: true
+    YEARS_BUILD_AVG:
+      type: float
+      nullable: true
+    COMMONAREA_AVG:
+      type: float
+      nullable: true
+    ELEVATORS_AVG:
+      type: float
+      nullable: true
+    ENTRANCES_AVG:
+      type: float
+      nullable: true
+    FLOORSMAX_AVG:
+      type: float
+      nullable: true
+    FLOORSMIN_AVG:
+      type: float
+      nullable: true
+    LANDAREA_AVG:
+      type: float
+      nullable: true
+    LIVINGAPARTMENTS_AVG:
+      type: float
+      nullable: true
+    LIVINGAREA_AVG:
+      type: float
+      nullable: true
+    NONLIVINGAPARTMENTS_AVG:
+      type: float
+      nullable: true
+    NONLIVINGAREA_AVG:
+      type: float
+      nullable: true
+    APARTMENTS_MODE:
+      type: float
+      nullable: true
+    BASEMENTAREA_MODE:
+      type: float
+      nullable: true
+    YEARS_BEGINEXPLUATATION_MODE:
+      type: float
+      nullable: true
+    YEARS_BUILD_MODE:
+      type: float
+      nullable: true
+    COMMONAREA_MODE:
+      type: float
+      nullable: true
+    ELEVATORS_MODE:
+      type: float
+      nullable: true
+    ENTRANCES_MODE:
+      type: float
+      nullable: true
+    FLOORSMAX_MODE:
+      type: float
+      nullable: true
+    FLOORSMIN_MODE:
+      type: float
+      nullable: true
+    LANDAREA_MODE:
+      type: float
+      nullable: true
+    LIVINGAPARTMENTS_MODE:
+      type: float
+      nullable: true
+    LIVINGAREA_MODE:
+      type: float
+      nullable: true
+    NONLIVINGAPARTMENTS_MODE:
+      type: float
+      nullable: true
+    NONLIVINGAREA_MODE:
+      type: float
+      nullable: true
+    APARTMENTS_MEDI:
+      type: float
+      nullable: true
+    BASEMENTAREA_MEDI:
+      type: float
+      nullable: true
+    YEARS_BEGINEXPLUATATION_MEDI:
+      type: float
+      nullable: true
+    YEARS_BUILD_MEDI:
+      type: float
+      nullable: true
+    COMMONAREA_MEDI:
+      type: float
+      nullable: true
+    ELEVATORS_MEDI:
+      type: float
+      nullable: true
+    ENTRANCES_MEDI:
+      type: float
+      nullable: true
+    FLOORSMAX_MEDI:
+      type: float
+      nullable: true
+    FLOORSMIN_MEDI:
+      type: float
+      nullable: true
+    LANDAREA_MEDI:
+      type: float
+      nullable: true
+    LIVINGAPARTMENTS_MEDI:
+      type: float
+      nullable: true
+    LIVINGAREA_MEDI:
+      type: float
+      nullable: true
+    NONLIVINGAPARTMENTS_MEDI:
+      type: float
+      nullable: true
+    NONLIVINGAREA_MEDI:
+      type: float
+      nullable: true
+    FONDKAPREMONT_MODE:
+      type: string
+      nullable: true
+    HOUSETYPE_MODE:
+      type: string
+      nullable: true
+    TOTALAREA_MODE:
+      type: float
+      nullable: true
+    WALLSMATERIAL_MODE:
+      type: string
+      nullable: true
+    EMERGENCYSTATE_MODE:
+      type: string
+      nullable: true
+    OBS_30_CNT_SOCIAL_CIRCLE:
+      type: float
+      nullable: true
+    DEF_30_CNT_SOCIAL_CIRCLE:
+      type: float
+      nullable: true
+    OBS_60_CNT_SOCIAL_CIRCLE:
+      type: float
+      nullable: true
+    DEF_60_CNT_SOCIAL_CIRCLE:
+      type: float
+      nullable: true
+    DAYS_LAST_PHONE_CHANGE:
+      type: float
+      nullable: false
+    FLAG_DOCUMENT_2:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_3:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_4:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_5:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_6:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_7:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_8:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_9:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_10:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_11:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_12:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_13:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_14:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_15:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_16:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_17:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_18:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_19:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_20:
+      type: int
+      nullable: false
+    FLAG_DOCUMENT_21:
+      type: int
+      nullable: false
+    AMT_REQ_CREDIT_BUREAU_HOUR:
+      type: float
+      nullable: true
+    AMT_REQ_CREDIT_BUREAU_DAY:
+      type: float
+      nullable: true
+    AMT_REQ_CREDIT_BUREAU_WEEK:
+      type: float
+      nullable: true
+    AMT_REQ_CREDIT_BUREAU_MON:
+      type: float
+      nullable: true
+    AMT_REQ_CREDIT_BUREAU_QRT:
+      type: float
+      nullable: true
+    AMT_REQ_CREDIT_BUREAU_YEAR:
+      type: float
+      nullable: true
+  primary_key:
+  - SK_ID_CURR

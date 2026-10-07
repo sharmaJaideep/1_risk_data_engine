@@ -54,7 +54,7 @@ Project layout (high level):
   - `data/processed/` — Compressed Parquet outputs from ingestion.
   - `data/duckdb/` — Local DuckDB database files and temporary assets.
 - `config/` — YAML schema definitions and business rule configurations.
-  - `config/schema_config.yaml` — Example schema for `application_train`.
+  - `config/schemas/<table>.yaml` — Full column schema (types, nullability, primary key) for each of the 8 Home Credit tables; draft new ones with `scripts/generate_schema.py`.
 - `src/` — Main Python package.
   - `src/ingestion/` — CSV-to-Parquet pipeline and schema validation helpers.
     - `schema_validator.py` — `pydantic`/YAML-based schema checking.

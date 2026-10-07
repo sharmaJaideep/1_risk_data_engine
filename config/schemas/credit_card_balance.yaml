@@ -1,0 +1,90 @@
+table_name: credit_card_balance
+strict_schema:
+  required_columns:
+  - SK_ID_PREV
+  - SK_ID_CURR
+  - MONTHS_BALANCE
+  - AMT_BALANCE
+  - AMT_CREDIT_LIMIT_ACTUAL
+  - AMT_DRAWINGS_CURRENT
+  - AMT_PAYMENT_TOTAL_CURRENT
+  - AMT_RECEIVABLE_PRINCIPAL
+  - AMT_RECIVABLE
+  - AMT_TOTAL_RECEIVABLE
+  - CNT_DRAWINGS_CURRENT
+  - NAME_CONTRACT_STATUS
+  - SK_DPD
+  - SK_DPD_DEF
+  columns:
+    SK_ID_PREV:
+      type: int
+      nullable: false
+    SK_ID_CURR:
+      type: int
+      nullable: false
+    MONTHS_BALANCE:
+      type: int
+      nullable: false
+    AMT_BALANCE:
+      type: float
+      nullable: false
+    AMT_CREDIT_LIMIT_ACTUAL:
+      type: int
+      nullable: false
+    AMT_DRAWINGS_ATM_CURRENT:
+      type: float
+      nullable: true
+    AMT_DRAWINGS_CURRENT:
+      type: float
+      nullable: false
+    AMT_DRAWINGS_OTHER_CURRENT:
+      type: float
+      nullable: true
+    AMT_DRAWINGS_POS_CURRENT:
+      type: float
+      nullable: true
+    AMT_INST_MIN_REGULARITY:
+      type: float
+      nullable: true
+    AMT_PAYMENT_CURRENT:
+      type: float
+      nullable: true
+    AMT_PAYMENT_TOTAL_CURRENT:
+      type: float
+      nullable: false
+    AMT_RECEIVABLE_PRINCIPAL:
+      type: float
+      nullable: false
+    AMT_RECIVABLE:
+      type: float
+      nullable: false
+    AMT_TOTAL_RECEIVABLE:
+      type: float
+      nullable: false
+    CNT_DRAWINGS_ATM_CURRENT:
+      type: float
+      nullable: true
+    CNT_DRAWINGS_CURRENT:
+      type: int
+      nullable: false
+    CNT_DRAWINGS_OTHER_CURRENT:
+      type: float
+      nullable: true
+    CNT_DRAWINGS_POS_CURRENT:
+      type: float
+      nullable: true
+    CNT_INSTALMENT_MATURE_CUM:
+      type: float
+      nullable: true
+    NAME_CONTRACT_STATUS:
+      type: string
+      nullable: false
+    SK_DPD:
+      type: int
+      nullable: false
+    SK_DPD_DEF:
+      type: int
+      nullable: false
+  primary_key:
+  - SK_ID_PREV
+  - MONTHS_BALANCE
