@@ -9,7 +9,8 @@ config/schemas/, and classifies every difference:
 - warning:  worth review (new column, removed optional column, int -> float widening)
 - info:     benign tightening (a nullable column is now never null)
 
-`diff_schemas` also compares any two schema versions directly.
+`diff_schemas` compares any two schema specs; `compare_versions` compares two
+stored versions of a table (e.g. to review a new version before adopting it).
 """
 from __future__ import annotations
 
@@ -19,7 +20,9 @@ from typing import Any
 
 import polars as pl
 
-from src.ingestion.schema_validator import SCHEMA_DIR, SchemaValidator, infer_schema
+from src.ingestion import schema_registry
+from src.ingestion.schema_registry import SCHEMA_DIR
+from src.ingestion.schema_validator import SchemaValidator, infer_schema
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -68,9 +71,31 @@ def diff_schemas(table: str, baseline: dict[str, Any], observed: dict[str, Any])
     return findings
 
 
-def detect_drift(table: str, frame: pl.DataFrame | pl.LazyFrame, schema_dir: str | Path = SCHEMA_DIR) -> list[DriftFinding]:
-    """Compare a frame against the baseline schema for `table`."""
-    baseline = SchemaValidator.for_table(table, schema_dir).schema["strict_schema"]
+def compare_versions(
+    table: str, from_version: int | None = None, to_version: int | None = None, schema_dir: str | Path = SCHEMA_DIR
+) -> list[DriftFinding]:
+    """Diff two stored versions of a table's schema (defaults: previous latest -> latest)."""
+    available = schema_registry.versions(table, schema_dir)
+    if to_version is None:
+        to_version = available[-1] if available else None
+    if from_version is None:
+        earlier = [v for v in available if to_version is not None and v < to_version]
+        if not earlier:
+            raise ValueError(f"'{table}' has no version before v{to_version} to compare against (versions: {available})")
+        from_version = earlier[-1]
+    old = SchemaValidator.for_table(table, from_version, schema_dir).schema["strict_schema"]
+    new = SchemaValidator.for_table(table, to_version, schema_dir).schema["strict_schema"]
+    return diff_schemas(table, old, new)
+
+
+def detect_drift(
+    table: str,
+    frame: pl.DataFrame | pl.LazyFrame,
+    schema_dir: str | Path = SCHEMA_DIR,
+    version: int | None = None,
+) -> list[DriftFinding]:
+    """Compare a frame against a table's schema (latest version unless `version` is given)."""
+    baseline = SchemaValidator.for_table(table, version, schema_dir).schema["strict_schema"]
     pk = baseline.get("primary_key") or []
     observed = infer_schema(table, frame, pk)["strict_schema"]
     findings = diff_schemas(table, baseline, observed)
@@ -90,20 +115,21 @@ def run_drift_report(data_dir: str | Path = "data/processed", schema_dir: str | 
     """Detect drift for every table that has both a schema and a parquet file; write the report."""
     data_dir = Path(data_dir)
     findings: list[DriftFinding] = []
-    for schema_file in sorted(Path(schema_dir).glob("*.yaml")):
-        table = schema_file.stem
+    versions_used: dict[str, int] = {}
+    for table in schema_registry.tables(schema_dir):
         parquet = data_dir / f"{table}.parquet"
         if not parquet.exists():
             logger.warning("%s: no parquet to check for drift", table)
             continue
+        versions_used[table] = schema_registry.latest_version(table, schema_dir)
         table_findings = detect_drift(table, pl.scan_parquet(parquet), schema_dir)
-        logger.info("%s: %d drift finding(s)", table, len(table_findings))
+        logger.info("%s (schema v%d): %d drift finding(s)", table, versions_used[table], len(table_findings))
         findings += table_findings
 
     report = pl.DataFrame(
         [asdict(f) for f in findings],
         schema={k: pl.String for k in DriftFinding.__dataclass_fields__},
-    )
+    ).with_columns(pl.col("table").replace_strict(versions_used, default=None, return_dtype=pl.Int64).alias("schema_version"))
     report.write_parquet(data_dir / "schema_drift_report.parquet")
     report.write_csv(data_dir / "schema_drift_report.csv")
     logger.info("Wrote schema drift report (%d findings) to %s", report.height, data_dir)

@@ -51,10 +51,9 @@ def test_no_drift_on_identical_schema():
 
 
 def test_detect_drift_finds_duplicate_keys_and_nulls(tmp_path):
-    schema = tmp_path / "bureau_balance.yaml"
-    import yaml
+    from src.ingestion.schema_registry import write_version
 
-    schema.write_text(yaml.safe_dump({"table_name": "bureau_balance", "strict_schema": {
+    write_version("bureau_balance", {"strict_schema": {
         "required_columns": ["SK_ID_BUREAU", "MONTHS_BALANCE", "STATUS"],
         "columns": {
             "SK_ID_BUREAU": {"type": "int", "nullable": False},
@@ -62,7 +61,7 @@ def test_detect_drift_finds_duplicate_keys_and_nulls(tmp_path):
             "STATUS": {"type": "string", "nullable": False},
         },
         "primary_key": ["SK_ID_BUREAU", "MONTHS_BALANCE"],
-    }}))
+    }}, tmp_path)
     frame = pl.DataFrame({"SK_ID_BUREAU": [1, 1], "MONTHS_BALANCE": [0, 0], "STATUS": ["C", None]})
     kinds = {(f.kind, f.severity) for f in detect_drift("bureau_balance", frame, tmp_path)}
     assert ("primary_key_duplicates", "breaking") in kinds

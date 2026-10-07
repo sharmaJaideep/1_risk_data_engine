@@ -1,4 +1,5 @@
 table_name: bureau
+version: 1
 strict_schema:
   required_columns:
   - SK_ID_CURR

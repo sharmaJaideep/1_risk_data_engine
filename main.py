@@ -29,18 +29,20 @@ def run_step(step: str, data_dir: Path, args: argparse.Namespace) -> None:
     elif step == "validate":
         import polars as pl
 
+        from src.ingestion import schema_registry
         from src.ingestion.schema_validator import SchemaValidator
 
         failed = False
-        for schema_file in sorted(Path("config/schemas").glob("*.yaml")):
-            parquet = processed_dir / f"{schema_file.stem}.parquet"
+        for table in schema_registry.tables():
+            parquet = processed_dir / f"{table}.parquet"
             if not parquet.exists():
-                logger.warning("%s: no parquet to validate", schema_file.stem)
+                logger.warning("%s: no parquet to validate", table)
                 continue
-            errors = SchemaValidator(schema_file).validate_frame(pl.scan_parquet(parquet))
+            validator = SchemaValidator.for_table(table)
+            errors = validator.validate_frame(pl.scan_parquet(parquet))
             for err in errors:
-                logger.error("%s: %s", schema_file.stem, err)
-            logger.info("%s: %s", schema_file.stem, "OK" if not errors else f"{len(errors)} violation(s)")
+                logger.error("%s: %s", table, err)
+            logger.info("%s (v%s): %s", table, validator.version, "OK" if not errors else f"{len(errors)} violation(s)")
             failed = failed or bool(errors)
         if failed:
             raise SystemExit("Schema validation failed")
@@ -73,11 +75,28 @@ def run_step(step: str, data_dir: Path, args: argparse.Namespace) -> None:
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Risk Data Engine CLI")
-    parser.add_argument("command", choices=[*STEPS, "run-all"], help="pipeline step to run")
+    parser.add_argument("command", choices=[*STEPS, "run-all", "schema-diff"], help="pipeline step to run")
+    parser.add_argument("--table", help="schema-diff: table to compare")
+    parser.add_argument("--from-version", type=int, help="schema-diff: older version (default: previous)")
+    parser.add_argument("--to-version", type=int, help="schema-diff: newer version (default: latest)")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--no-llm", action="store_true", help="skip the LLM narrative in `diagnose`")
     parser.add_argument("--skip-ingest", action="store_true", help="with run-all, reuse existing parquet files")
     args = parser.parse_args()
+
+    if args.command == "schema-diff":
+        from src.ingestion.schema_drift import compare_versions
+
+        if not args.table:
+            parser.error("schema-diff requires --table")
+        try:
+            findings = compare_versions(args.table, args.from_version, args.to_version)
+        except (ValueError, FileNotFoundError) as exc:
+            parser.error(str(exc))
+        for f in findings:
+            print(f"[{f.severity}] {f.kind} {f.column}: {f.baseline} -> {f.observed}")
+        print(f"{len(findings)} difference(s)")
+        return
 
     steps = STEPS if args.command == "run-all" else [args.command]
     if args.skip_ingest:

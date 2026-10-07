@@ -6,7 +6,8 @@ from typing import Any
 import polars as pl
 import yaml
 
-SCHEMA_DIR = Path("config/schemas")
+from src.ingestion.schema_registry import SCHEMA_DIR, schema_path
+
 _TYPE_CHECKS = {
     "int": lambda dtype: dtype.is_integer(),
     "float": lambda dtype: dtype.is_float(),
@@ -18,13 +19,19 @@ class SchemaValidator:
     """Validate input columns and data against a YAML schema definition."""
 
     def __init__(self, schema_path: str | Path | None = None) -> None:
-        self.schema_path = Path(schema_path or SCHEMA_DIR / "application_train.yaml")
+        self.schema_path = Path(schema_path or schema_path("application_train"))
         self.schema = self._load_schema()
 
     @classmethod
-    def for_table(cls, table: str, schema_dir: str | Path = SCHEMA_DIR) -> "SchemaValidator":
-        """Load the schema for a table from config/schemas/<table>.yaml."""
-        return cls(Path(schema_dir) / f"{table}.yaml")
+    def for_table(
+        cls, table: str, version: int | None = None, schema_dir: str | Path = SCHEMA_DIR
+    ) -> "SchemaValidator":
+        """Load a table's schema from config/schemas/<table>/v<N>.yaml (latest version by default)."""
+        return cls(schema_path(table, version, schema_dir))
+
+    @property
+    def version(self) -> int | None:
+        return self.schema.get("version")
 
     def _load_schema(self) -> dict[str, Any]:
         with self.schema_path.open("r", encoding="utf-8") as handle:
