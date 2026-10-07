@@ -1,0 +1,20 @@
+# Monthly roll-rate alert thresholds used by the diagnostic agent.
+#   roll_in_max:  share of CURRENT accounts that move into any DPD bucket
+#   forward_max:  share of 1-30 DPD accounts that move to 31+ DPD
+# `sources` entries override `default` key by key. Values are placeholders sized from
+# observed portfolio levels (roughly 2x the current rates); replace them with the
+# risk-appetite limits your team signs off.
+roll_rates:
+  default:
+    roll_in_max: 0.05
+    forward_max: 0.15
+  sources:
+    bureau:
+      roll_in_max: 0.05
+      forward_max: 0.15
+    credit_card:
+      roll_in_max: 0.035
+      forward_max: 0.10
+    pos_cash:
+      roll_in_max: 0.025
+      forward_max: 0.10

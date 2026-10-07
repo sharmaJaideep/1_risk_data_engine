@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import polars as pl
+import yaml
 
 from src.utils.logger import get_logger
 
@@ -16,8 +17,11 @@ PSI_SIGNIFICANT = 0.25
 DEFAULT_MODEL = "anthropic:claude-sonnet-5-5"
 
 # Roll-rate thresholds: monthly share of accounts that move into / further into delinquency.
-ROLL_IN_MAX = 0.05  # CURRENT -> any DPD bucket
-ROLL_FORWARD_MAX = 0.15  # DPD_1_30 -> DPD_31_60 or worse
+# Built-in fallbacks; config/thresholds.yaml overrides these, per source.
+DEFAULT_ROLL_THRESHOLDS = {
+    "roll_in_max": 0.05,  # CURRENT -> any DPD bucket
+    "forward_max": 0.15,  # DPD_1_30 -> DPD_31_60 or worse
+}
 # Vintage: compare the newest cohort to the trailing cohorts at a fixed months-on-book.
 VINTAGE_MOB = 12
 VINTAGE_MIN_ACCOUNTS = 1000
@@ -61,6 +65,7 @@ class DiagnosticAgent:
         context: dict[str, Any] | None = None,
         report_path: str | Path = "data/processed/portfolio_stability_report.parquet",
         schema_drift_path: str | Path | None = None,
+        thresholds_path: str | Path = "config/thresholds.yaml",
         roll_rate_path: str | Path | None = None,
         vintage_path: str | Path | None = None,
         use_llm: bool = True,
@@ -76,6 +81,8 @@ class DiagnosticAgent:
         self.use_llm = use_llm
         self.model = model
         self.top_n = top_n
+        self.thresholds_path = Path(thresholds_path)
+        self._roll_config = self._load_roll_config()
 
     def run(self) -> DiagnosticReport:
         if not self.report_path.exists():
@@ -141,6 +148,20 @@ class DiagnosticAgent:
             return "warning", findings, ["Review schema warnings and update config/schemas/ if the change is intended"]
         return "ok", findings, []
 
+    def _load_roll_config(self) -> dict[str, Any]:
+        if not self.thresholds_path.exists():
+            logger.info("%s not found; using built-in roll-rate thresholds", self.thresholds_path)
+            return {}
+        return (yaml.safe_load(self.thresholds_path.read_text()) or {}).get("roll_rates", {})
+
+    def roll_thresholds(self, source: str) -> dict[str, float]:
+        """Thresholds for a source: built-ins, then the file's default, then the source's own overrides."""
+        return {
+            **DEFAULT_ROLL_THRESHOLDS,
+            **self._roll_config.get("default", {}),
+            **self._roll_config.get("sources", {}).get(source, {}),
+        }
+
     @staticmethod
     def _per_source(
         path: Path, missing_msg: str, check: Callable[[pl.DataFrame, str], tuple[str, list[str], list[str]]]
@@ -170,13 +191,14 @@ class DiagnosticAgent:
             self.vintage_path, "Vintage curves not found; skipped (run the `vintage` step)", self._vintage_for
         )
 
-    @staticmethod
-    def _roll_rates_for(rr: pl.DataFrame, source: str) -> tuple[str, list[str], list[str]]:
+    def _roll_rates_for(self, rr: pl.DataFrame, source: str) -> tuple[str, list[str], list[str]]:
 
         def share(from_bucket: str, to_buckets: tuple[str, ...]) -> float:
             sel = rr.filter(pl.col("from_bucket") == from_bucket)
             return float(sel.filter(pl.col("to_bucket").is_in(to_buckets))["roll_rate"].sum())
 
+        limits = self.roll_thresholds(source)
+        roll_in_max, forward_max = limits["roll_in_max"], limits["forward_max"]
         roll_in = share("CURRENT", _DPD_BUCKETS)
         forward = share("DPD_1_30", _DPD_BUCKETS[1:])
         cure = share("DPD_1_30", ("CURRENT",))
@@ -185,13 +207,13 @@ class DiagnosticAgent:
         ]
         recs: list[str] = []
         severity = "ok"
-        if roll_in > ROLL_IN_MAX:
+        if roll_in > roll_in_max:
             severity = "warning"
-            findings.append(f"CURRENT->delinquent roll-in {roll_in:.1%} exceeds {ROLL_IN_MAX:.0%} threshold")
+            findings.append(f"CURRENT->delinquent roll-in {roll_in:.1%} exceeds {roll_in_max:.1%} threshold")
             recs.append("Review origination and early-account management: too many current accounts are slipping into delinquency")
-        if forward > ROLL_FORWARD_MAX:
+        if forward > forward_max:
             severity = "warning"
-            findings.append(f"1-30 DPD forward roll {forward:.1%} exceeds {ROLL_FORWARD_MAX:.0%} threshold")
+            findings.append(f"1-30 DPD forward roll {forward:.1%} exceeds {forward_max:.1%} threshold")
             recs.append("Strengthen early-stage collections: early delinquents are not curing")
         return severity, findings, recs
 
