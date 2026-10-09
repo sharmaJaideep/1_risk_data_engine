@@ -8,3 +8,4 @@ pytest
 pyyaml
 pydantic-ai
 python-dotenv
+anthropic>=0.61,<0.76

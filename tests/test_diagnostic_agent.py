@@ -142,3 +142,28 @@ def test_committed_thresholds_file_is_well_formed():
     for source in ("bureau", "credit_card", "pos_cash"):
         limits = agent.roll_thresholds(source)
         assert set(limits) == {"roll_in_max", "forward_max"} and all(0 < v < 1 for v in limits.values())
+
+
+def _drifting_report(tmp_path):
+    return _write(tmp_path, [("AMT_CREDIT", 0.41, "SIGNIFICANT_DRIFT")])
+
+
+def test_llm_narrative_used_when_key_present(tmp_path, monkeypatch):
+    from pydantic_ai.models.test import TestModel
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    report = DiagnosticAgent(
+        report_path=_drifting_report(tmp_path), model=TestModel(custom_output_text="Loan sizes shifted."), use_llm=True
+    ).run()
+    assert report.narrative == "Loan sizes shifted."
+    assert "## Summary" in report.to_markdown()
+
+
+def test_llm_skipped_without_key_and_failures_fall_back(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    report = DiagnosticAgent(report_path=_drifting_report(tmp_path), use_llm=True).run()
+    assert report.status == "critical" and report.narrative is None
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "invalid-key")  # reaches the API and fails auth, or fails offline
+    report = DiagnosticAgent(report_path=_drifting_report(tmp_path), use_llm=True).run()
+    assert report.status == "critical" and report.narrative is None

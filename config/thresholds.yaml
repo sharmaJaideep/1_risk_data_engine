@@ -1,20 +1,19 @@
 # Monthly roll-rate alert thresholds used by the diagnostic agent.
-#   roll_in_max:  share of CURRENT accounts that move into any DPD bucket
-#   forward_max:  share of 1-30 DPD accounts that move to 31+ DPD
-# `sources` entries override `default` key by key. Values are placeholders sized from
-# observed portfolio levels (roughly 2x the current rates); replace them with the
-# risk-appetite limits your team signs off.
+#
+#   roll_in_max:  "30-day roll rate" - share of CURRENT accounts that move into any DPD
+#                 bucket in a month. 5% is a common retail early-delinquency alert level.
+#   forward_max:  "30->60 roll rate" - share of 1-30 DPD accounts that move to 31+ DPD in a
+#                 month. Retail books typically run 10-30%, so these sit at the low-to-middle
+#                 of that range; observed today: bureau 6.2%, credit_card 4.1%, pos_cash 4.6%.
+#
+# `sources` entries override `default` key by key. Replace with your portfolio's signed-off
+# risk-appetite limits before using these for real monitoring.
 roll_rates:
   default:
     roll_in_max: 0.05
     forward_max: 0.15
   sources:
-    bureau:
-      roll_in_max: 0.05
-      forward_max: 0.15
     credit_card:
-      roll_in_max: 0.035
       forward_max: 0.10
     pos_cash:
-      roll_in_max: 0.025
       forward_max: 0.10
