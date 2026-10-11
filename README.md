@@ -152,6 +152,16 @@ If you want, I can now:
 
 Choose one and I will proceed.
 
+## Testing
+
+```
+python -m pytest --cov          # 133 tests, ~4 s; fails below 90% line coverage (currently 99%)
+```
+
+Tests build their own tiny datasets; the few that check the real `data/processed` files skip when it is absent.
+CI (`.github/workflows/ci.yml`) runs the same command on Python 3.10 and 3.11.
+Beyond line coverage, key logic (PSI maths, roll-rate and vintage definitions, aggregators, agent escalation, schema/versioning, converter, CLI) is covered by behavioural assertions, and 17 of 18 deliberately planted bugs were caught by the suite; the 18th was an equivalent change.
+
 ## Stability monitoring (PSI / CSI)
 
 `python main.py stability` compares a baseline cohort with a target cohort for every feature, using baseline-derived bins.

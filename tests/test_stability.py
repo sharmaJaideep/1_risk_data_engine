@@ -177,3 +177,29 @@ def test_committed_config_is_well_formed():
     for a in config["analyses"]:
         assert ("baseline" in a and "target" in a) or ("table" in a and "time_column" in a)
         assert 0 < a.get("baseline_fraction", 0.7) < 1
+
+
+# ---- coverage of labels, skips and degenerate runs ----------------------------------------
+
+@pytest.mark.parametrize(
+    ("psi", "label"),
+    [(float("nan"), "UNKNOWN"), (0.0, "STABLE"), (0.0999, "STABLE"), (0.10, "MODERATE_SHIFT"), (0.2499, "MODERATE_SHIFT"), (0.25, "SIGNIFICANT_DRIFT"), (9.0, "SIGNIFICANT_DRIFT")],
+)
+def test_drift_label_boundaries(psi, label):
+    assert drift_label(psi) == label
+
+
+def test_train_vs_test_analysis_is_skipped_when_an_input_is_missing(tmp_path):
+    pl.DataFrame({"x": [1.0, 2.0, 3.0]}).write_parquet(tmp_path / "train.parquet")  # no test.parquet
+    config = tmp_path / "c.yaml"
+    config.write_text(yaml.safe_dump({"analyses": [{"name": "tvt", "baseline": "train", "target": "test"}]}))
+    report = run_stability(tmp_path, config)
+    assert report.height == 0 and (tmp_path / "portfolio_stability_report.parquet").exists()
+
+
+def test_features_that_cannot_be_binned_are_left_out(tmp_path):
+    pl.DataFrame({"empty": [None, None, None], "ok": [1.0, 2.0, 3.0]}, schema={"empty": pl.Float64, "ok": pl.Float64}).write_parquet(tmp_path / "train.parquet")
+    pl.DataFrame({"empty": [1.0, 2.0, 3.0], "ok": [1.0, 2.0, 3.0]}).write_parquet(tmp_path / "test.parquet")
+    config = tmp_path / "c.yaml"
+    config.write_text(yaml.safe_dump({"analyses": [{"name": "tvt", "baseline": "train", "target": "test"}]}))
+    assert run_stability(tmp_path, config)["feature_name"].to_list() == ["ok"]  # all-null baseline: no yardstick

@@ -8,3 +8,5 @@ __pycache__/
 .venv/
 .DS_Store
 docs/cv_template.docx
+.coverage
+htmlcov/

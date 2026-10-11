@@ -194,3 +194,71 @@ def test_alerting_analysis_escalates_and_names_analysis_and_driver(tmp_path):
     report = DiagnosticAgent(report_path=path, use_llm=False, roll_rate_path=tmp_path / "x", vintage_path=tmp_path / "y").run()
     assert report.status == "critical"
     assert any("[train_vs_test] NAME_CONTRACT_TYPE" in f and "driven by bin Revolving loans" in f for f in report.findings)
+
+
+# ---- remaining branches --------------------------------------------------------------------
+
+def _drift_report(tmp_path, rows):
+    path = tmp_path / "schema_drift_report.parquet"
+    pl.DataFrame(rows, schema=["table", "kind", "column", "baseline", "observed", "severity"], orient="row").write_parquet(path)
+    return path
+
+
+def _agent_with(tmp_path, **paths):
+    stability = _write(tmp_path, [("A", 0.01, "STABLE")])
+    return DiagnosticAgent(
+        report_path=stability, roll_rate_path=paths.get("roll", tmp_path / "x"), vintage_path=paths.get("vintage", tmp_path / "y"),
+        schema_drift_path=paths.get("drift"), use_llm=False,
+    ).run()
+
+
+def test_missing_stability_report_is_an_error(tmp_path):
+    report = DiagnosticAgent(report_path=tmp_path / "nope.parquet", use_llm=False).run()
+    assert report.status == "error" and "python main.py run-all" in report.recommendations[0]
+
+
+def test_schema_warnings_alone_give_warning_and_breaking_gives_critical(tmp_path):
+    warn_only = _drift_report(tmp_path, [("bureau", "column_added", "NEW", "absent", "string", "warning")])
+    assert _agent_with(tmp_path, drift=warn_only).status == "warning"
+    breaking = _drift_report(tmp_path, [("bureau", "type_changed", "AMT", "float", "string", "breaking")])
+    report = _agent_with(tmp_path, drift=breaking)
+    assert report.status == "critical" and any("type_changed bureau.AMT" in f for f in report.findings)
+
+
+def test_informational_schema_drift_does_not_escalate(tmp_path):
+    info = _drift_report(tmp_path, [("bureau", "nulls_absent", "X", "nullable", "no nulls observed", "info")])
+    assert _agent_with(tmp_path, drift=info).status == "ok"
+
+
+def test_missing_optional_reports_are_noted_not_fatal(tmp_path):
+    report = _agent_with(tmp_path, drift=tmp_path / "none")
+    text = " | ".join(report.findings)
+    assert report.status == "ok"
+    assert "Schema drift report not found" in text and "Roll-rate matrix not found" in text and "Vintage curves not found" in text
+
+
+def test_too_few_vintage_cohorts_is_reported(tmp_path):
+    path = tmp_path / "v.parquet"
+    rows = [(-96 + 3 * i, 12, 5000, 40, 0.01) for i in range(3)]
+    pl.DataFrame(rows, schema=["cohort_start_month", "mob", "accounts_observed", "accounts_bad", "cumulative_bad_rate"], orient="row").write_parquet(path)
+    report = _agent_with(tmp_path, vintage=path)
+    assert report.status == "ok" and any("Too few cohorts" in f for f in report.findings)
+
+
+def test_forward_roll_breach_warns_with_a_collections_recommendation(tmp_path):
+    rows = [("CURRENT", "CURRENT", 0.99), ("CURRENT", "DPD_1_30", 0.01), ("DPD_1_30", "CURRENT", 0.5), ("DPD_1_30", "DPD_31_60", 0.5)]
+    path = tmp_path / "rr.parquet"
+    pl.DataFrame(rows, schema=["from_bucket", "to_bucket", "roll_rate"], orient="row").write_parquet(path)
+    report = _agent_with(tmp_path, roll=path)
+    assert report.status == "warning"
+    assert any("forward roll 50.0% exceeds 15.0%" in f for f in report.findings)
+    assert any("early-stage collections" in r for r in report.recommendations)
+
+
+def test_markdown_brief_layout():
+    from src.agents.diagnostic_agent import DiagnosticReport
+
+    md = DiagnosticReport("warning", ["finding one"], ["do this"], narrative="Because.").to_markdown()
+    assert md.index("## Summary") < md.index("## Findings") < md.index("## Recommendations")
+    assert "**Status:** WARNING" in md and "- finding one" in md and "- do this" in md
+    assert "## Summary" not in DiagnosticReport("ok", [], []).to_markdown()

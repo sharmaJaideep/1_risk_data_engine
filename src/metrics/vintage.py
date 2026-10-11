@@ -75,7 +75,7 @@ MONTHS_PER_COHORT = 3
 def _connect(path: str | Path) -> tuple[DuckDBEngine, str]:
     path = Path(path)
     if not path.exists():
-        raise FileNotFoundError(f"bureau_balance parquet not found: {path}")
+        raise FileNotFoundError(f"snapshot parquet not found: {path}")
     return DuckDBEngine(":memory:"), str(path)
 
 

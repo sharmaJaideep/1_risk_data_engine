@@ -1,4 +1,5 @@
 import polars as pl
+import pytest
 
 from src.metrics.vintage import compute_roll_rates, compute_vintage
 
@@ -60,13 +61,85 @@ def test_dpd_sources_map_days_to_buckets_and_completed_to_closed(tmp_path):
         }
 
 
-def test_dpd_vintage_bad_means_over_60_days(tmp_path):
+@pytest.mark.parametrize("source", ["credit_card", "pos_cash"])
+def test_dpd_vintage_bad_means_over_60_days(tmp_path, source):
     # acct 1 hits 61 dpd at MOB 1; acct 2 peaks at exactly 60 dpd and is never bad
     path = _write_dpd(
         tmp_path,
         "pos",
         [(1, -2, 0, "Active"), (1, -1, 61, "Active"), (2, -2, 0, "Active"), (2, -1, 60, "Active")],
     )
-    v = compute_vintage(path, source="pos_cash")
+    v = compute_vintage(path, source=source)
     rates = dict(zip(v["mob"], v["cumulative_bad_rate"]))
     assert rates[0] == 0.0 and rates[1] == 0.5
+
+
+# ---- edge cases and the report builder --------------------------------------------------
+
+import pytest
+
+from src.metrics.vintage import VintageMetrics, build_vintage_reports
+
+
+def _bureau(tmp_path, rows, name="bb"):
+    path = tmp_path / f"{name}.parquet"
+    pl.DataFrame(rows, schema=["SK_ID_BUREAU", "MONTHS_BALANCE", "STATUS"], orient="row").write_parquet(path)
+    return path
+
+
+def test_missing_months_produce_no_transition(tmp_path):
+    # months -3 and -1 are not consecutive, so there is no observed month-over-month move
+    rr = compute_roll_rates(_bureau(tmp_path, [(1, -3, "0"), (1, -1, "1")]))
+    assert rr.height == 0
+
+
+def test_unknown_status_rows_are_ignored(tmp_path):
+    rr = compute_roll_rates(_bureau(tmp_path, [(1, -2, "0"), (1, -1, "X"), (1, 0, "0")]))
+    assert rr.height == 0  # the X month breaks the chain
+
+
+def test_vintage_denominator_only_counts_accounts_observed_at_that_age(tmp_path):
+    # acct 1 is observed for 6 months and goes bad at MOB 4; acct 2 is only observed for 3 months
+    rows = [(1, m, "3" if m >= -1 else "0") for m in range(-5, 1)] + [(2, m, "0") for m in range(-5, -2)]
+    v = compute_vintage(_bureau(tmp_path, rows))
+    by_mob = {r["mob"]: r for r in v.iter_rows(named=True)}
+    assert by_mob[2]["accounts_observed"] == 2 and by_mob[2]["cumulative_bad_rate"] == 0.0
+    assert by_mob[4]["accounts_observed"] == 1 and by_mob[4]["cumulative_bad_rate"] == 1.0  # acct 2 no longer counted
+
+
+def test_cohort_width_groups_opening_months(tmp_path):
+    rows = [(1, -7, "0"), (1, -6, "0"), (2, -6, "0"), (2, -5, "0"), (3, -5, "0"), (3, -4, "0")]
+    v = compute_vintage(_bureau(tmp_path, rows), months_per_cohort=3)
+    cohorts = {r["cohort_start_month"]: r["accounts_observed"] for r in v.filter(pl.col("mob") == 0).iter_rows(named=True)}
+    assert cohorts == {-9: 1, -6: 2}  # opening months -7 | -6 and -5 share a cohort
+
+
+def test_missing_snapshot_file_raises(tmp_path):
+    with pytest.raises(FileNotFoundError, match="snapshot parquet not found"):
+        compute_roll_rates(tmp_path / "nope.parquet")
+
+
+def test_build_reports_skips_missing_sources_and_tags_the_rest(tmp_path):
+    _bureau(tmp_path, [(1, -2, "0"), (1, -1, "1"), (1, 0, "3")], name="bureau_balance")
+    reports = build_vintage_reports(tmp_path)
+    assert set(reports["roll_rate_matrix"]["source"]) == {"bureau"} and set(reports["vintage_curves"]["source"]) == {"bureau"}
+    assert (tmp_path / "roll_rate_matrix.csv").exists() and (tmp_path / "vintage_curves.parquet").exists()
+
+
+def test_build_reports_stacks_all_three_sources(tmp_path):
+    _bureau(tmp_path, [(1, -1, "0"), (1, 0, "0")], name="bureau_balance")
+    for name in ("credit_card_balance", "POS_CASH_balance"):
+        _write_dpd(tmp_path, name, [(1, -2, 0, "Active"), (1, -1, 0, "Active")])
+    reports = build_vintage_reports(tmp_path)
+    assert set(reports["roll_rate_matrix"]["source"]) == {"bureau", "credit_card", "pos_cash"}
+
+
+def test_build_reports_with_no_inputs_raises(tmp_path):
+    with pytest.raises(FileNotFoundError, match="No snapshot parquet files"):
+        build_vintage_reports(tmp_path)
+
+
+def test_vintage_metrics_wrappers_delegate(tmp_path):
+    path = _bureau(tmp_path, [(1, -1, "0"), (1, 0, "1")])
+    assert VintageMetrics.roll_rate(path).equals(compute_roll_rates(path))
+    assert VintageMetrics.vintage_analysis(path).equals(compute_vintage(path))

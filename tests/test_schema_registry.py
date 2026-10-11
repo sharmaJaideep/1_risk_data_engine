@@ -77,3 +77,33 @@ def test_every_committed_table_has_v1_and_matches_its_version_field():
             assert spec["table_name"] == table and spec["version"] == v
         assert reg.versions(table)[0] == 1
     assert len(reg.tables()) == 8
+
+
+# ---- drift/validator branches ---------------------------------------------------------------
+
+from src.ingestion.schema_drift import diff_schemas
+from src.ingestion.schema_validator import infer_schema
+
+
+def test_primary_key_change_is_breaking():
+    old = {"columns": {"id": {"type": "int", "nullable": False}}, "primary_key": ["id"]}
+    new = {"columns": {"id": {"type": "int", "nullable": False}}, "primary_key": ["id", "month"]}
+    kinds = {(f.kind, f.severity) for f in diff_schemas("t", old, new)}
+    assert kinds == {("primary_key_changed", "breaking")}
+
+
+def test_drift_report_skips_tables_without_a_parquet(tmp_path):
+    reg.write_version("t", {"strict_schema": V1}, tmp_path / "schemas")
+    report = run_drift_report(tmp_path, tmp_path / "schemas")
+    assert report.height == 0 and (tmp_path / "schema_drift_report.csv").exists()
+
+
+def test_infer_schema_rejects_unsupported_dtypes():
+    with pytest.raises(ValueError, match="Unsupported dtype"):
+        infer_schema("t", pl.DataFrame({"flag": [True, False]}), [])
+
+
+def test_infer_schema_marks_columns_with_nulls_nullable():
+    spec = infer_schema("t", pl.DataFrame({"a": [1, 2], "b": [1.0, None], "c": ["x", "y"]}), ["a"])["strict_schema"]
+    assert {c: s["nullable"] for c, s in spec["columns"].items()} == {"a": False, "b": True, "c": False}
+    assert spec["required_columns"] == ["a", "c"] and spec["primary_key"] == ["a"]
