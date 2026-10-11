@@ -180,11 +180,15 @@ class DiagnosticAgent:
 
     def roll_thresholds(self, source: str) -> dict[str, float]:
         """Thresholds for a source: built-ins, then the file's default, then the source's own overrides."""
-        return {
+        limits = {
             **DEFAULT_ROLL_THRESHOLDS,
             **self._roll_config.get("default", {}),
             **self._roll_config.get("sources", {}).get(source, {}),
         }
+        # Balance-weighted limits fall back to the account-count limits unless set explicitly.
+        limits.setdefault("balance_roll_in_max", limits["roll_in_max"])
+        limits.setdefault("balance_forward_max", limits["forward_max"])
+        return limits
 
     @staticmethod
     def _per_source(
@@ -216,29 +220,40 @@ class DiagnosticAgent:
         )
 
     def _roll_rates_for(self, rr: pl.DataFrame, source: str) -> tuple[str, list[str], list[str]]:
-
-        def share(from_bucket: str, to_buckets: tuple[str, ...]) -> float:
+        def share(column: str, from_bucket: str, to_buckets: tuple[str, ...]) -> float:
             sel = rr.filter(pl.col("from_bucket") == from_bucket)
-            return float(sel.filter(pl.col("to_bucket").is_in(to_buckets))["roll_rate"].sum())
+            return float(sel.filter(pl.col("to_bucket").is_in(to_buckets))[column].sum())
 
         limits = self.roll_thresholds(source)
-        roll_in_max, forward_max = limits["roll_in_max"], limits["forward_max"]
-        roll_in = share("CURRENT", _DPD_BUCKETS)
-        forward = share("DPD_1_30", _DPD_BUCKETS[1:])
-        cure = share("DPD_1_30", ("CURRENT",))
+        roll_in = share("roll_rate", "CURRENT", _DPD_BUCKETS)
+        forward = share("roll_rate", "DPD_1_30", _DPD_BUCKETS[1:])
+        cure = share("roll_rate", "DPD_1_30", ("CURRENT",))
         findings = [
             f"Roll rates: CURRENT->delinquent {roll_in:.1%}, 1-30 DPD->31+ DPD {forward:.1%}, 1-30 DPD cures to CURRENT {cure:.1%}"
         ]
         recs: list[str] = []
         severity = "ok"
-        if roll_in > roll_in_max:
-            severity = "warning"
-            findings.append(f"CURRENT->delinquent roll-in {roll_in:.1%} exceeds {roll_in_max:.1%} threshold")
-            recs.append("Review origination and early-account management: too many current accounts are slipping into delinquency")
-        if forward > forward_max:
-            severity = "warning"
-            findings.append(f"1-30 DPD forward roll {forward:.1%} exceeds {forward_max:.1%} threshold")
-            recs.append("Strengthen early-stage collections: early delinquents are not curing")
+
+        def check(label: str, value: float, limit: float, rec: str) -> None:
+            nonlocal severity
+            if value > limit:
+                severity = "warning"
+                findings.append(f"{label} {value:.1%} exceeds {limit:.1%} threshold")
+                if rec not in recs:
+                    recs.append(rec)
+
+        roll_in_rec = "Review origination and early-account management: too many current accounts are slipping into delinquency"
+        forward_rec = "Strengthen early-stage collections: early delinquents are not curing"
+        check("CURRENT->delinquent roll-in", roll_in, limits["roll_in_max"], roll_in_rec)
+        check("1-30 DPD forward roll", forward, limits["forward_max"], forward_rec)
+
+        # Balance-weighted view (only sources with monthly balances): dollars, not accounts, at risk.
+        if "balance_roll_rate" in rr.columns and rr["balance_roll_rate"].null_count() < rr.height:
+            b_in = share("balance_roll_rate", "CURRENT", _DPD_BUCKETS)
+            b_fwd = share("balance_roll_rate", "DPD_1_30", _DPD_BUCKETS[1:])
+            findings.append(f"Balance-weighted: CURRENT->delinquent {b_in:.1%}, 1-30 DPD->31+ DPD {b_fwd:.1%}")
+            check("Balance-weighted CURRENT->delinquent roll-in", b_in, limits["balance_roll_in_max"], roll_in_rec)
+            check("Balance-weighted 1-30 DPD forward roll", b_fwd, limits["balance_forward_max"], forward_rec)
         return severity, findings, recs
 
     @staticmethod

@@ -126,22 +126,28 @@ def test_per_source_roll_threshold_overrides_default(tmp_path):
 
 def test_thresholds_fall_back_to_builtins_and_merge_partial_overrides(tmp_path):
     missing = DiagnosticAgent(report_path=tmp_path / "r.parquet", thresholds_path=tmp_path / "nope.yaml", use_llm=False)
-    assert missing.roll_thresholds("pos_cash") == {"roll_in_max": 0.05, "forward_max": 0.15}
+    assert missing.roll_thresholds("pos_cash") == {
+        "roll_in_max": 0.05, "forward_max": 0.15, "balance_roll_in_max": 0.05, "balance_forward_max": 0.15,
+    }
 
     partial = DiagnosticAgent(
         report_path=tmp_path / "r.parquet",
         thresholds_path=_write_thresholds(tmp_path, "roll_rates:\n  sources:\n    pos_cash: {forward_max: 0.08}\n"),
         use_llm=False,
     )
-    assert partial.roll_thresholds("pos_cash") == {"roll_in_max": 0.05, "forward_max": 0.08}
-    assert partial.roll_thresholds("bureau") == {"roll_in_max": 0.05, "forward_max": 0.15}
+    # balance limits follow the count limits unless set explicitly
+    assert partial.roll_thresholds("pos_cash") == {
+        "roll_in_max": 0.05, "forward_max": 0.08, "balance_roll_in_max": 0.05, "balance_forward_max": 0.08,
+    }
+    assert partial.roll_thresholds("bureau")["balance_forward_max"] == 0.15
 
 
 def test_committed_thresholds_file_is_well_formed():
     agent = DiagnosticAgent(use_llm=False)
     for source in ("bureau", "credit_card", "pos_cash"):
         limits = agent.roll_thresholds(source)
-        assert set(limits) == {"roll_in_max", "forward_max"} and all(0 < v < 1 for v in limits.values())
+        assert set(limits) == {"roll_in_max", "forward_max", "balance_roll_in_max", "balance_forward_max"}
+        assert all(0 < v < 1 for v in limits.values())
 
 
 def _drifting_report(tmp_path):
@@ -262,3 +268,39 @@ def test_markdown_brief_layout():
     assert md.index("## Summary") < md.index("## Findings") < md.index("## Recommendations")
     assert "**Status:** WARNING" in md and "- finding one" in md and "- do this" in md
     assert "## Summary" not in DiagnosticReport("ok", [], []).to_markdown()
+
+
+# ---- balance-weighted roll rates -----------------------------------------------------------
+
+def _balance_roll_rates(tmp_path, count_in, balance_in, source="credit_card", with_balance=True):
+    rows = []
+    for to_bucket, c, b in (("CURRENT", 1 - count_in, 1 - balance_in), ("DPD_1_30", count_in, balance_in)):
+        rows.append((source, "CURRENT", to_bucket, c, b if with_balance else None))
+    rows += [(source, "DPD_1_30", "CURRENT", 0.9, 0.9 if with_balance else None), (source, "DPD_1_30", "DPD_31_60", 0.1, 0.1 if with_balance else None)]
+    path = tmp_path / "rr.parquet"
+    pl.DataFrame(rows, schema=["source", "from_bucket", "to_bucket", "roll_rate", "balance_roll_rate"], orient="row").write_parquet(path)
+    return path
+
+
+def test_balance_weighted_breach_is_flagged_even_when_counts_look_fine(tmp_path):
+    report = _agent_with(tmp_path, roll=_balance_roll_rates(tmp_path, count_in=0.01, balance_in=0.09))
+    assert report.status == "warning"
+    text = " | ".join(report.findings)
+    assert "Balance-weighted: CURRENT->delinquent 9.0%" in text
+    assert "Balance-weighted CURRENT->delinquent roll-in 9.0% exceeds 5.0% threshold" in text
+    assert not any(f.startswith("[credit_card] CURRENT->delinquent roll-in") for f in report.findings)  # count view is fine
+
+
+def test_balance_limits_can_be_set_separately(tmp_path):
+    thresholds = _write_thresholds(tmp_path, "roll_rates:\n  default: {roll_in_max: 0.05, forward_max: 0.15, balance_roll_in_max: 0.10}\n")
+    agent = DiagnosticAgent(
+        report_path=_write(tmp_path, [("A", 0.01, "STABLE")]),
+        roll_rate_path=_balance_roll_rates(tmp_path, count_in=0.01, balance_in=0.09),
+        vintage_path=tmp_path / "y", thresholds_path=thresholds, use_llm=False,
+    )
+    assert agent.run().status == "ok"  # 9% is under the explicit 10% balance limit
+
+
+def test_sources_without_balances_show_no_balance_line(tmp_path):
+    report = _agent_with(tmp_path, roll=_balance_roll_rates(tmp_path, 0.01, 0.0, source="bureau", with_balance=False))
+    assert report.status == "ok" and not any("Balance-weighted" in f for f in report.findings)

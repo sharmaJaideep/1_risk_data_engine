@@ -6,6 +6,10 @@
 #                 month. Retail books typically run 10-30%, so these sit at the low-to-middle
 #                 of that range; observed today: bureau 6.2%, credit_card 4.1%, pos_cash 4.6%.
 #
+#   balance_roll_in_max / balance_forward_max: the same two rates weighted by balance
+#                 (credit_card only; the other sources hold no balances). They default to the
+#                 limits above; set them to hold dollars at risk to a different standard.
+#
 # `sources` entries override `default` key by key. Replace with your portfolio's signed-off
 # risk-appetite limits before using these for real monitoring.
 roll_rates:

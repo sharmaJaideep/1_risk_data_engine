@@ -9,6 +9,11 @@ earlier months negative:
 - credit_card: credit_card_balance, keyed by SK_ID_PREV; buckets derived from SK_DPD.
 - pos_cash:    POS_CASH_balance, keyed by SK_ID_PREV; buckets derived from SK_DPD.
 
+Roll rates are reported two ways: by account count (`roll_rate`) and weighted by the balance
+the account carried in the month it rolls from (`balance_roll_rate`). Only credit_card has
+monthly balances (AMT_BALANCE; negative balances/credits count as zero exposure);
+bureau_balance and POS_CASH_balance hold no amounts, so their balance columns are NULL.
+
 For credit_card and pos_cash, NAME_CONTRACT_STATUS = 'Completed' maps to CLOSED
 and SK_DPD days map to the same buckets as bureau STATUS, so matrices are
 comparable across sources. "Bad" means 61+ days past due in every source.
@@ -57,16 +62,19 @@ class Source:
     bucket_sql: str
     bad_sql: str  # 61+ days past due
     where_sql: str  # drops rows with no usable delinquency information
+    balance_sql: str | None = None  # monthly exposure; None when the table holds no amounts
 
     def snapshot_sql(self, path: str) -> str:
+        balance = f"({self.balance_sql})" if self.balance_sql else "CAST(NULL AS DOUBLE)"
         return f"""
-        SELECT {self.id_col} AS acct, MONTHS_BALANCE, {self.bucket_sql} AS bucket, ({self.bad_sql}) AS is_bad
+        SELECT {self.id_col} AS acct, MONTHS_BALANCE, {self.bucket_sql} AS bucket, ({self.bad_sql}) AS is_bad,
+               {balance} AS balance
         FROM read_parquet('{path}') WHERE {self.where_sql}"""
 
 
 SOURCES = {
     "bureau": Source("bureau_balance.parquet", "SK_ID_BUREAU", _BUREAU_BUCKET, "STATUS IN ('3', '4', '5')", "STATUS <> 'X'"),
-    "credit_card": Source("credit_card_balance.parquet", "SK_ID_PREV", _DPD_BUCKET, "SK_DPD > 60", "SK_DPD IS NOT NULL"),
+    "credit_card": Source("credit_card_balance.parquet", "SK_ID_PREV", _DPD_BUCKET, "SK_DPD > 60", "SK_DPD IS NOT NULL", "GREATEST(COALESCE(AMT_BALANCE, 0), 0)"),
     "pos_cash": Source("POS_CASH_balance.parquet", "SK_ID_PREV", _DPD_BUCKET, "SK_DPD > 60", "SK_DPD IS NOT NULL"),
 }
 MONTHS_PER_COHORT = 3
@@ -82,19 +90,23 @@ def _connect(path: str | Path) -> tuple[DuckDBEngine, str]:
 def compute_roll_rates(snapshot_path: str | Path, source: str = "bureau") -> pl.DataFrame:
     """Month-over-month transition matrix between delinquency buckets.
 
-    Returns source, from_bucket, to_bucket, accounts (transition count) and
-    roll_rate (share of the from_bucket's transitions that land in to_bucket).
+    Returns source, from_bucket, to_bucket, accounts (transition count), roll_rate (share of
+    the from_bucket's transitions that land in to_bucket), balance (opening balance of those
+    transitions) and balance_roll_rate (share of the from_bucket's opening balance that lands
+    in to_bucket; NULL when the source has no balances or the bucket held none).
     """
     conn, path = _connect(snapshot_path)
     sql = f"""
     WITH b AS ({SOURCES[source].snapshot_sql(path)}),
     t AS (
-        SELECT cur.bucket AS from_bucket, nxt.bucket AS to_bucket
+        SELECT cur.bucket AS from_bucket, nxt.bucket AS to_bucket, cur.balance AS balance
         FROM b cur
         JOIN b nxt ON nxt.acct = cur.acct AND nxt.MONTHS_BALANCE = cur.MONTHS_BALANCE + 1
     )
     SELECT '{source}' AS source, from_bucket, to_bucket, COUNT(*) AS accounts,
-           COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY from_bucket) AS roll_rate
+           COUNT(*) * 1.0 / SUM(COUNT(*)) OVER (PARTITION BY from_bucket) AS roll_rate,
+           SUM(balance) AS balance,
+           SUM(balance) / NULLIF(SUM(SUM(balance)) OVER (PARTITION BY from_bucket), 0) AS balance_roll_rate
     FROM t GROUP BY from_bucket, to_bucket
     ORDER BY from_bucket, to_bucket
     """
