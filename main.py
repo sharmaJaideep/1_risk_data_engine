@@ -51,9 +51,9 @@ def run_step(step: str, data_dir: Path, args: argparse.Namespace) -> None:
 
         build_master_analytical_record(str(processed_dir))
     elif step == "stability":
-        from src.metrics.stability import calculate_portfolio_stability
+        from src.metrics.stability import run_stability
 
-        calculate_portfolio_stability(str(processed_dir / "master_analytical_record.parquet"))
+        run_stability(processed_dir)
     elif step == "vintage":
         from src.metrics.vintage import build_vintage_reports
 

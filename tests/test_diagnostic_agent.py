@@ -167,3 +167,30 @@ def test_llm_skipped_without_key_and_failures_fall_back(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "invalid-key")  # reaches the API and fails auth, or fails offline
     report = DiagnosticAgent(report_path=_drifting_report(tmp_path), use_llm=True).run()
     assert report.status == "critical" and report.narrative is None
+
+
+def _stability_report(tmp_path, rows):
+    path = tmp_path / "portfolio_stability_report.parquet"
+    pl.DataFrame(
+        rows,
+        schema=["analysis", "feature_name", "psi_score", "drift_status", "top_driver", "alerting"],
+        orient="row",
+    ).write_parquet(path)
+    return path
+
+
+def test_informational_analyses_do_not_raise_alerts(tmp_path):
+    path = _stability_report(
+        tmp_path,
+        [("train_vs_test", "A", 0.01, "STABLE", "(0, 1]", True), ("by_recency", "B", 3.0, "SIGNIFICANT_DRIFT", "__NULL__", False)],
+    )
+    report = DiagnosticAgent(report_path=path, use_llm=False, roll_rate_path=tmp_path / "x", vintage_path=tmp_path / "y").run()
+    assert report.status == "ok"
+    assert any("Informational" in f and "1 with PSI" in f for f in report.findings)
+
+
+def test_alerting_analysis_escalates_and_names_analysis_and_driver(tmp_path):
+    path = _stability_report(tmp_path, [("train_vs_test", "NAME_CONTRACT_TYPE", 0.4, "SIGNIFICANT_DRIFT", "Revolving loans", True)])
+    report = DiagnosticAgent(report_path=path, use_llm=False, roll_rate_path=tmp_path / "x", vintage_path=tmp_path / "y").run()
+    assert report.status == "critical"
+    assert any("[train_vs_test] NAME_CONTRACT_TYPE" in f and "driven by bin Revolving loans" in f for f in report.findings)

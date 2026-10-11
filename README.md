@@ -54,6 +54,7 @@ Project layout (high level):
   - `data/processed/` — Compressed Parquet outputs from ingestion.
   - `data/duckdb/` — Optional persistent DuckDB file, created on demand by `DuckDBEngine()` (the pipeline itself runs in memory).
 - `config/` — YAML schema definitions and business rule configurations.
+  - `config/stability.yaml` — Cohort definitions for PSI/CSI: train vs test, and older vs more recent records per table.
   - `config/thresholds.yaml` — Roll-rate alert thresholds for the diagnostic agent, with per-source overrides (bureau, credit_card, pos_cash).
   - `config/schemas/<table>/v<N>.yaml` — Versioned column schemas (types, nullability, primary key) for each of the 8 Home Credit tables. Versions are immutable and the highest N is current. Add one with `python scripts/generate_schema.py --bump <table>` and review it with `python main.py schema-diff --table <table>`.
 - `src/` — Main Python package.
@@ -61,7 +62,7 @@ Project layout (high level):
     - `schema_validator.py` — `pydantic`/YAML-based schema checking.
     - `converter.py` — `polars` CSV -> Parquet converter.
   - `src/metrics/` — PSI/CSI, vintage, and roll-rate computations.
-    - `stability.py` — PSI/CSI algorithms.
+    - `stability.py` — PSI (score) and CSI (per-bin characteristic) drift detection, driven by `config/stability.yaml`.
     - `vintage.py` — Roll-rate and vintage analysis for bureau, credit card and POS cash accounts.
   - `src/db/` — DuckDB connector and zero-copy helpers.
     - `duckdb_engine.py` — Simple DuckDB connection wrapper.
@@ -150,6 +151,18 @@ If you want, I can now:
 - Add CI checks and a benchmark notebook that measures Polars vs. Pandas for a few key aggregation queries.
 
 Choose one and I will proceed.
+
+## Stability monitoring (PSI / CSI)
+
+`python main.py stability` compares a baseline cohort with a target cohort for every feature, using baseline-derived bins.
+Numeric features use quantile bins with open-ended edges, categorical features use one bin per category plus `__OTHER__`, and missing values get their own `__NULL__` bin.
+The report gives each feature's PSI, a status (stable < 0.10 <= moderate < 0.25 <= significant) and the bin that drives the shift (`top_driver`).
+
+Cohorts are set in `config/stability.yaml`:
+- `application_train_vs_test` alerts: is the population being scored like the one developed on? (EXT_SOURCE_* are tagged as scores.)
+- Time-split analyses (older 70% vs more recent 30% of each child table) are reported but informational.
+
+**Limitation:** Home Credit has no calendar dates. Every time column is relative to each customer's own application date, so these splits show older-vs-recent *history*, not calendar drift, and they differ structurally (product mix, fields collected). With real dates, set `alert: true` for them.
 
 ## Benchmark: pandas vs the DuckDB pipeline
 

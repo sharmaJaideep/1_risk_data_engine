@@ -1,0 +1,56 @@
+# Cohort definitions for PSI/CSI drift detection (src/metrics/stability.py).
+#
+# Home Credit has no calendar dates: every time column is measured in days/months
+# *relative to each customer's own application date*. "Older vs more recent" below therefore
+# means older vs more recent history before application, not calendar drift. Columns derived
+# from the same relative clock (DAYS_*, balances that grow with account age) shift by
+# construction in time-split analyses, so time-split analyses exclude DAYS_*.
+#
+# `alert: false` analyses are still written to the report, but the diagnostic agent does not
+# raise alerts from them. The time-split ones are informational because older and more recent
+# records differ structurally here (product mix, fields collected, account-age effects), so a
+# high PSI is expected and not an incident. With real calendar dates, set them to alert: true.
+bins: 10
+exclude_prefixes: [SK_ID]
+exclude_columns: [TARGET]
+
+analyses:
+  # Population stability: is the population we score (test) like the one we developed on (train)?
+  - name: application_train_vs_test
+    baseline: application_train
+    target: application_test
+    score_columns: [EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3]  # external credit scores
+
+  # Older (baseline, oldest 70% by time) vs more recent (target, newest 30%) records.
+  - name: previous_application_by_recency
+    table: previous_application
+    time_column: DAYS_DECISION
+    baseline_fraction: 0.7
+    alert: false
+    exclude_prefixes: [DAYS_]
+
+  - name: bureau_by_recency
+    table: bureau
+    time_column: DAYS_CREDIT
+    baseline_fraction: 0.7
+    alert: false
+    exclude_prefixes: [DAYS_]
+
+  - name: credit_card_by_recency
+    table: credit_card_balance
+    time_column: MONTHS_BALANCE
+    baseline_fraction: 0.7
+    alert: false
+
+  - name: pos_cash_by_recency
+    table: POS_CASH_balance
+    time_column: MONTHS_BALANCE
+    baseline_fraction: 0.7
+    alert: false
+
+  - name: installments_by_recency
+    table: installments_payments
+    time_column: DAYS_INSTALMENT
+    baseline_fraction: 0.7
+    alert: false
+    exclude_prefixes: [DAYS_]

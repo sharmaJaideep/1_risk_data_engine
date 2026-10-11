@@ -97,17 +97,41 @@ class DiagnosticAgent:
             .filter(~pl.col("feature_name").str.starts_with("SK_ID"))  # identifiers, not drift features
             .sort("psi_score", descending=True)
         )
-        significant = report.filter(pl.col("psi_score") >= PSI_SIGNIFICANT)
-        moderate = report.filter((pl.col("psi_score") >= PSI_MODERATE) & (pl.col("psi_score") < PSI_SIGNIFICANT))
+        # Older reports have no analysis / alerting columns: treat them as one alerting analysis.
+        if "analysis" not in report.columns:
+            report = report.with_columns(pl.lit("portfolio").alias("analysis"))
+        if "top_driver" not in report.columns:
+            report = report.with_columns(pl.lit(None, dtype=pl.String).alias("top_driver"))
+        if "alerting" not in report.columns:
+            report = report.with_columns(pl.lit(True).alias("alerting"))
+
+        alerting = report.filter(pl.col("alerting"))
+        informational = report.filter(~pl.col("alerting"))
+        significant = alerting.filter(pl.col("psi_score") >= PSI_SIGNIFICANT)
+        moderate = alerting.filter((pl.col("psi_score") >= PSI_MODERATE) & (pl.col("psi_score") < PSI_SIGNIFICANT))
 
         status = "critical" if significant.height else "warning" if moderate.height else "ok"
-        findings = [
-            f"{report.height} features scored: {significant.height} significant drift "
-            f"(PSI >= {PSI_SIGNIFICANT}), {moderate.height} moderate shift, "
-            f"{report.height - significant.height - moderate.height} stable"
+        findings = []
+        for name in alerting["analysis"].unique(maintain_order=True):
+            sub = alerting.filter(pl.col("analysis") == name)
+            sig = sub.filter(pl.col("psi_score") >= PSI_SIGNIFICANT).height
+            mod = sub.filter((pl.col("psi_score") >= PSI_MODERATE) & (pl.col("psi_score") < PSI_SIGNIFICANT)).height
+            findings.append(
+                f"[{name}] {sub.height} features scored: {sig} significant drift "
+                f"(PSI >= {PSI_SIGNIFICANT}), {mod} moderate shift, {sub.height - sig - mod} stable"
+            )
+        breaches = alerting.filter(pl.col("psi_score") >= PSI_MODERATE).head(self.top_n).to_dicts()
+        findings += [
+            f"[{b['analysis']}] {b['feature_name']}: PSI={b['psi_score']:.4f} ({b['drift_status']})"
+            + (f", driven by bin {b['top_driver']}" if b["top_driver"] else "")
+            for b in breaches
         ]
-        breaches = report.filter(pl.col("psi_score") >= PSI_MODERATE).head(self.top_n).to_dicts()
-        findings += [f"{b['feature_name']}: PSI={b['psi_score']:.4f} ({b['drift_status']})" for b in breaches]
+        if informational.height:
+            drifted = informational.filter(pl.col("psi_score") >= PSI_SIGNIFICANT).height
+            findings.append(
+                f"Informational (not alerting): {informational.height} features across "
+                f"{informational['analysis'].n_unique()} time-split analyses, {drifted} with PSI >= {PSI_SIGNIFICANT}; see the stability report"
+            )
 
         recommendations = self._recommendations(status, breaches)
 
