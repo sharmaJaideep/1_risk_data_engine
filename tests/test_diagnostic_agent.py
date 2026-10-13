@@ -304,3 +304,47 @@ def test_balance_limits_can_be_set_separately(tmp_path):
 def test_sources_without_balances_show_no_balance_line(tmp_path):
     report = _agent_with(tmp_path, roll=_balance_roll_rates(tmp_path, 0.01, 0.0, source="bureau", with_balance=False))
     assert report.status == "ok" and not any("Balance-weighted" in f for f in report.findings)
+
+
+# ---- model health ---------------------------------------------------------------------------
+
+def _model_metrics(tmp_path, **overrides):
+    metrics = {"auc": 0.76, "gini": 0.52, "ks": 0.39, "mean_predicted": 0.0808, "base_rate": 0.0807, "n_holdout": 61503}
+    path = tmp_path / "model_metrics.json"
+    path.write_text(__import__("json").dumps({**metrics, **overrides}))
+    return path
+
+
+def _model_agent(tmp_path, metrics_path, thresholds=None):
+    return DiagnosticAgent(
+        report_path=_write(tmp_path, [("A", 0.01, "STABLE")]), model_metrics_path=metrics_path,
+        roll_rate_path=tmp_path / "x", vintage_path=tmp_path / "y",
+        thresholds_path=thresholds or tmp_path / "none.yaml", use_llm=False,
+    ).run()
+
+
+def test_healthy_model_is_reported_without_a_warning(tmp_path):
+    report = _model_agent(tmp_path, _model_metrics(tmp_path))
+    assert report.status == "ok"
+    assert any("Model: AUC 0.760, Gini 0.520, KS 0.390" in f and "8.08% vs observed 8.07%" in f for f in report.findings)
+
+
+def test_weak_discrimination_warns(tmp_path):
+    report = _model_agent(tmp_path, _model_metrics(tmp_path, auc=0.62, ks=0.18))
+    assert report.status == "warning"
+    assert any("discrimination below floor" in f for f in report.findings) and any("Retrain" in r for r in report.recommendations)
+
+
+def test_miscalibrated_model_warns(tmp_path):
+    report = _model_agent(tmp_path, _model_metrics(tmp_path, mean_predicted=0.12))  # 49% over-prediction
+    assert report.status == "warning" and any("calibration off by 49%" in f for f in report.findings)
+
+
+def test_model_limits_are_configurable(tmp_path):
+    thresholds = _write_thresholds(tmp_path, "model:\n  min_auc: 0.80\n")
+    assert _model_agent(tmp_path, _model_metrics(tmp_path), thresholds).status == "warning"  # 0.76 < the stricter floor
+
+
+def test_missing_model_metrics_are_noted_not_fatal(tmp_path):
+    report = _model_agent(tmp_path, tmp_path / "nope.json")
+    assert report.status == "ok" and any("Model metrics not found" in f for f in report.findings)

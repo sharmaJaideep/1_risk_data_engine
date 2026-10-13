@@ -21,3 +21,11 @@ roll_rates:
       forward_max: 0.10
     pos_cash:
       forward_max: 0.10
+
+# Model-health limits for the PD model (data/models/model_metrics.json), measured on the hold-out.
+#   min_auc / min_ks:        discrimination floors; below them the model is not separating defaulters.
+#   max_calibration_error:   allowed relative gap between mean predicted and observed default rate.
+model:
+  min_auc: 0.70
+  min_ks: 0.30
+  max_calibration_error: 0.10

@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import sys
 
 import polars as pl
@@ -30,14 +31,14 @@ def test_run_all_runs_every_step_in_order(monkeypatch, data_dir):
     calls = []
     monkeypatch.setattr(cli, "run_step", lambda step, d, a: calls.append(step))
     run_cli(monkeypatch, "run-all", "--data-dir", str(data_dir))
-    assert calls == ["ingest", "drift", "validate", "aggregate", "stability", "vintage", "diagnose"]
+    assert calls == ["ingest", "drift", "validate", "aggregate", "train", "score", "stability", "vintage", "diagnose"]
 
 
 def test_skip_ingest_drops_only_ingest(monkeypatch, data_dir):
     calls = []
     monkeypatch.setattr(cli, "run_step", lambda step, d, a: calls.append(step))
     run_cli(monkeypatch, "run-all", "--skip-ingest", "--data-dir", str(data_dir))
-    assert "ingest" not in calls and calls[0] == "drift" and len(calls) == 6
+    assert "ingest" not in calls and calls[0] == "drift" and len(calls) == 8
 
 
 def test_single_step_runs_alone_with_the_given_data_dir(monkeypatch, data_dir):
@@ -150,3 +151,61 @@ def test_schema_diff_reports_a_friendly_error_when_there_is_nothing_to_compare(m
         run_cli(monkeypatch, "schema-diff", "--table", "bureau")  # committed schemas only have v1
     assert exc.value.code == 2
     assert "no version before" in capsys.readouterr().err
+
+
+# ---- model steps through the CLI -------------------------------------------------------------
+
+def test_train_score_and_diagnose_steps_work_together(monkeypatch, data_dir):
+    from tests.test_pd_model import _mar
+
+    processed = data_dir / "processed"
+    _mar().write_parquet(processed / "master_analytical_record.parquet")
+    _mar(300, seed=5, with_target=False).write_parquet(processed / "master_analytical_record_test.parquet")
+
+    run_cli(monkeypatch, "train", "--data-dir", str(data_dir))
+    run_cli(monkeypatch, "score", "--data-dir", str(data_dir))
+
+    assert (data_dir / "models" / "model_metrics.json").exists()
+    assert pl.read_parquet(processed / "model_scores_test.parquet").height == 300
+    assert pl.read_parquet(processed / "model_scores_development.parquet").height > 0
+
+    pl.DataFrame({"feature_name": ["A"], "psi_score": [0.01], "drift_status": ["STABLE"]}).write_parquet(processed / "portfolio_stability_report.parquet")
+    run_cli(monkeypatch, "diagnose", "--no-llm", "--data-dir", str(data_dir))
+    assert "Model: AUC" in (processed / "diagnostic_brief.md").read_text()
+
+
+# ---- diagnose --fail-on (so a scheduler can alert on a bad verdict) ----------------------------
+
+def _stability_with(data_dir, psi):
+    pl.DataFrame({"feature_name": ["A"], "psi_score": [psi], "drift_status": ["X"]}).write_parquet(
+        data_dir / "processed" / "portfolio_stability_report.parquet"
+    )
+
+
+@pytest.mark.parametrize(
+    ("psi", "fail_on", "should_fail"),
+    [(0.5, "never", False), (0.5, "critical", True), (0.5, "warning", True), (0.15, "critical", False), (0.15, "warning", True), (0.01, "warning", False)],
+)
+def test_fail_on_exits_nonzero_only_at_the_requested_severity(monkeypatch, data_dir, psi, fail_on, should_fail):
+    _stability_with(data_dir, psi)
+    args = ("diagnose", "--no-llm", "--fail-on", fail_on, "--data-dir", str(data_dir))
+    if should_fail:
+        with pytest.raises(SystemExit, match="Diagnostic status"):
+            run_cli(monkeypatch, *args)
+    else:
+        run_cli(monkeypatch, *args)
+    assert (data_dir / "processed" / "diagnostic_brief.md").exists()  # the brief is written either way
+
+
+def test_missing_report_counts_as_a_failure_under_fail_on_critical(monkeypatch, data_dir):
+    with pytest.raises(SystemExit, match="ERROR"):
+        run_cli(monkeypatch, "diagnose", "--no-llm", "--fail-on", "critical", "--data-dir", str(data_dir))
+
+
+def test_data_dir_defaults_from_the_environment(monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setattr(cli, "run_step", lambda step, d, a: seen.append(d))
+    monkeypatch.setenv("RISK_DATA_DIR", str(tmp_path))
+    run_cli(monkeypatch, "vintage")
+    run_cli(monkeypatch, "vintage", "--data-dir", "explicit")  # the flag still wins
+    assert seen == [tmp_path, Path("explicit")]

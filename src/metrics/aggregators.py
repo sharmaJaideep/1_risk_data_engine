@@ -25,22 +25,31 @@ def _safe_parquet(path: str) -> str:
     return str(Path(path))
 
 
-def build_master_analytical_record(data_dir: str = "data/processed") -> None:
+def mar_filename(application: str) -> str:
+    """application_train -> master_analytical_record.parquet; application_test -> ..._test.parquet."""
+    if application == "application_train":
+        return "master_analytical_record.parquet"
+    return f"master_analytical_record_{application.removeprefix('application_')}.parquet"
+
+
+def build_master_analytical_record(data_dir: str = "data/processed", application: str = "application_train") -> None:
     """Builds the Master Analytical Record (MAR) and writes it out.
 
     Parameters
     - data_dir: location of processed parquet files
+    - application: base application table to enrich (application_train, or application_test to
+      build the same features for scoring)
     """
     data_dir = Path(data_dir)
     conn = DuckDBEngine(":memory:")
 
     # File paths
-    app_fp = data_dir / "application_train.parquet"
+    app_fp = data_dir / f"{application}.parquet"
     bureau_fp = data_dir / "bureau.parquet"
     bureau_balance_fp = data_dir / "bureau_balance.parquet"
     installments_fp = data_dir / "installments_payments.parquet"
     previous_fp = data_dir / "previous_application.parquet"
-    out_fp = data_dir / "master_analytical_record.parquet"
+    out_fp = data_dir / mar_filename(application)
 
     # Warn for missing inputs
     inputs: List[Path] = [app_fp, bureau_fp, bureau_balance_fp, installments_fp, previous_fp]
@@ -127,7 +136,7 @@ def build_master_analytical_record(data_dir: str = "data/processed") -> None:
 
     # Build Master Analytical Record by left-joining onto application_train
     if not app_fp.exists():
-        logger.error("application_train.parquet not found in %s; aborting MAR build", str(data_dir))
+        logger.error("%s.parquet not found in %s; aborting MAR build", application, str(data_dir))
         conn.close()
         return
 

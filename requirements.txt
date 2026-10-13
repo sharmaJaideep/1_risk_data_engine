@@ -10,3 +10,4 @@ pyyaml
 pydantic-ai
 python-dotenv
 anthropic>=0.61,<0.76
+scikit-learn>=1.4,<1.7

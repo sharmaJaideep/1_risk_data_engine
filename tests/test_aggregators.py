@@ -130,3 +130,24 @@ def test_missing_optional_input_still_builds_mar(tmp_path, missing):
     build_master_analytical_record(str(tmp_path))
     assert (tmp_path / MAR).exists()
     assert pl.read_parquet(tmp_path / MAR).height == 3
+
+
+# ---- scoring population ---------------------------------------------------------------------
+
+def test_mar_filenames_per_application_table():
+    from src.metrics.aggregators import mar_filename
+
+    assert mar_filename("application_train") == "master_analytical_record.parquet"
+    assert mar_filename("application_test") == "master_analytical_record_test.parquet"
+
+
+def test_test_population_gets_the_same_features_without_a_target(tmp_path):
+    _write_inputs(tmp_path)
+    _write(tmp_path, "application_test", [(1,), (2,), (9,)], {"SK_ID_CURR": pl.Int64})  # 9 has no history
+    build_master_analytical_record(str(tmp_path))
+    build_master_analytical_record(str(tmp_path), "application_test")
+    train = pl.read_parquet(tmp_path / MAR)
+    test = pl.read_parquet(tmp_path / "master_analytical_record_test.parquet")
+    assert "TARGET" not in test.columns and "TARGET" in train.columns
+    assert [c for c in train.columns if c != "TARGET"] == test.columns  # identical feature layout, in order
+    assert test.sort("SK_ID_CURR")["bureau_total_accounts"].to_list() == [2, 1, 0]  # applicant 9: zeros, not nulls

@@ -61,6 +61,8 @@ Project layout (high level):
   - `src/ingestion/` — CSV-to-Parquet pipeline and schema validation helpers.
     - `schema_validator.py` — `pydantic`/YAML-based schema checking.
     - `converter.py` — `polars` CSV -> Parquet converter.
+  - `src/modeling/` — `pd_model.py`: PD model training, evaluation and scoring.
+  - `src/pipeline.py` — The step dependency graph shared by the CLI and the Airflow DAG.
   - `src/metrics/` — PSI/CSI, vintage, and roll-rate computations.
     - `stability.py` — PSI (score) and CSI (per-bin characteristic) drift detection, driven by `config/stability.yaml`.
     - `vintage.py` — Roll-rate (by account count, and by balance for credit card) and vintage analysis for bureau, credit card and POS cash accounts.
@@ -151,6 +153,26 @@ If you want, I can now:
 - Add CI checks and a benchmark notebook that measures Polars vs. Pandas for a few key aggregation queries.
 
 Choose one and I will proceed.
+
+## Predictive model
+
+`python main.py train` fits a gradient-boosted probability-of-default model on the master record (`src/modeling/pd_model.py`); `python main.py score` scores the `application_test` population.
+On a stratified 20% hold-out it reaches **AUC 0.77, Gini 0.54, KS 0.41**, and predicted default rates match observed rates across score deciles.
+The hold-out is random, not out-of-time (Home Credit has no dates), so treat these as an optimistic bound. Metrics are written to `data/models/model_metrics.json`.
+
+The model closes the monitoring loop: PSI on the score itself (development hold-out vs the scored population), and a model-health check in the diagnostic agent (discrimination floors and calibration, set in `config/thresholds.yaml`).
+
+## Orchestration and deployment
+
+`src/pipeline.py` defines the steps and their dependencies once. `python main.py run-all` follows it, and so does the Airflow DAG in `dags/risk_engine_dag.py` (one task per step, retries, `max_active_runs=1`).
+The DAG's `diagnose` task runs with `--fail-on critical`, so a CRITICAL verdict fails the task and fires whatever alerting your Airflow has; it is the one task that does not retry, because its verdict is deterministic.
+The DAG was run end to end under Airflow 2.10 (all steps succeeded; `diagnose` failed on the CRITICAL verdict, as designed). Airflow is not a project dependency: install it separately to use the DAG, and set `RISK_ENGINE_PYTHON` to the interpreter that has this project's requirements.
+
+**Container.** The `Dockerfile` builds one image for every step: `docker run -v $PWD/data:/data <image> run-all`. It was written but **not built or tested** (no Docker in the development environment).
+
+**Cloud.** Nothing here is deployed. A typical AWS mapping: image in ECR; data in S3 (the pipeline reads local paths today, so mount the bucket or sync it to disk, or extend the readers to `s3://` URIs via DuckDB's `httpfs`); the DAG on MWAA, with each step as an ECS/Fargate task; `ANTHROPIC_API_KEY` from Secrets Manager; Airflow task failures to your alerting channel.
+
+**Spark.** Not used, deliberately. The whole pipeline (41M-row tables) runs in about 35 seconds on a laptop, and DuckDB/Polars beat Spark at this size because there is no cluster start-up or shuffle cost. Spark earns its place when data no longer fits one machine (hundreds of GB and up). The aggregation SQL in `src/metrics/aggregators.py` is close to portable to Spark SQL.
 
 ## Testing
 

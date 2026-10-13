@@ -20,6 +20,7 @@ dependencies = [
     "pyyaml",
     "pydantic-ai",
     "anthropic>=0.61,<0.76",  # pydantic-ai 0.8.x breaks on newer anthropic releases
+    "scikit-learn>=1.4,<1.7",
     "python-dotenv",
 ]
 

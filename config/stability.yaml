@@ -21,6 +21,12 @@ analyses:
     target: application_test
     score_columns: [EXT_SOURCE_1, EXT_SOURCE_2, EXT_SOURCE_3]  # external credit scores
 
+  # PSI on the model score itself: out-of-sample development scores vs the scored population.
+  - name: model_score_dev_vs_test
+    baseline: model_scores_development
+    target: model_scores_test
+    score_columns: [score]
+
   # Older (baseline, oldest 70% by time) vs more recent (target, newest 30%) records.
   - name: previous_application_by_recency
     table: previous_application

@@ -1,0 +1,13 @@
+.git
+.venv
+.github
+__pycache__
+.pytest_cache
+.coverage
+data
+docs
+notebooks
+tests
+dags
+*.parquet
+*.csv

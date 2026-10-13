@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,8 @@ DEFAULT_ROLL_THRESHOLDS = {
     "roll_in_max": 0.05,  # CURRENT -> any DPD bucket
     "forward_max": 0.15,  # DPD_1_30 -> DPD_31_60 or worse
 }
+# Model health (hold-out metrics); config/thresholds.yaml `model:` overrides these.
+DEFAULT_MODEL_LIMITS = {"min_auc": 0.70, "min_ks": 0.30, "max_calibration_error": 0.10}
 # Vintage: compare the newest cohort to the trailing cohorts at a fixed months-on-book.
 VINTAGE_MOB = 12
 VINTAGE_MIN_ACCOUNTS = 1000
@@ -66,6 +69,7 @@ class DiagnosticAgent:
         report_path: str | Path = "data/processed/portfolio_stability_report.parquet",
         schema_drift_path: str | Path | None = None,
         thresholds_path: str | Path = "config/thresholds.yaml",
+        model_metrics_path: str | Path | None = None,
         roll_rate_path: str | Path | None = None,
         vintage_path: str | Path | None = None,
         use_llm: bool = True,
@@ -78,11 +82,15 @@ class DiagnosticAgent:
         self.schema_drift_path = Path(schema_drift_path) if schema_drift_path else base / "schema_drift_report.parquet"
         self.roll_rate_path = Path(roll_rate_path) if roll_rate_path else base / "roll_rate_matrix.parquet"
         self.vintage_path = Path(vintage_path) if vintage_path else base / "vintage_curves.parquet"
+        self.model_metrics_path = (
+            Path(model_metrics_path) if model_metrics_path else base.parent / "models" / "model_metrics.json"
+        )
         self.use_llm = use_llm
         self.model = model
         self.top_n = top_n
         self.thresholds_path = Path(thresholds_path)
         self._roll_config = self._load_roll_config()
+        self._model_config = self._load_model_config()
 
     def run(self) -> DiagnosticReport:
         if not self.report_path.exists():
@@ -135,7 +143,7 @@ class DiagnosticAgent:
 
         recommendations = self._recommendations(status, breaches)
 
-        for check in (self._check_schema_drift, self._check_roll_rates, self._check_vintage):
+        for check in (self._check_schema_drift, self._check_model, self._check_roll_rates, self._check_vintage):
             sev, extra_findings, extra_recs = check()
             findings += extra_findings
             recommendations += [r for r in extra_recs if r not in recommendations]
@@ -146,6 +154,25 @@ class DiagnosticAgent:
 
         narrative = self._narrative(findings) if self.use_llm and status != "ok" else None
         return DiagnosticReport(status, findings, recommendations, narrative, breaches)
+
+    def _check_model(self) -> tuple[str, list[str], list[str]]:
+        if not self.model_metrics_path.exists():
+            return "ok", ["Model metrics not found; skipped (run the `train` step)"], []
+        m = json.loads(self.model_metrics_path.read_text())
+        limits = {**DEFAULT_MODEL_LIMITS, **self._model_config}
+        gap = abs(m["mean_predicted"] / m["base_rate"] - 1) if m["base_rate"] else float("inf")
+        findings = [
+            f"Model: AUC {m['auc']:.3f}, Gini {m['gini']:.3f}, KS {m['ks']:.3f}; mean predicted default rate "
+            f"{m['mean_predicted']:.2%} vs observed {m['base_rate']:.2%} on {m['n_holdout']:,} hold-out accounts"
+        ]
+        recs: list[str] = []
+        if m["auc"] < limits["min_auc"] or m["ks"] < limits["min_ks"]:
+            findings.append(f"Model discrimination below floor (AUC >= {limits['min_auc']}, KS >= {limits['min_ks']})")
+            recs.append("Retrain or recalibrate the PD model: it no longer separates defaulters well enough")
+        if gap > limits["max_calibration_error"]:
+            findings.append(f"Model calibration off by {gap:.0%} (limit {limits['max_calibration_error']:.0%})")
+            recs.append("Recalibrate the PD model: predicted default rates do not match observed")
+        return ("warning" if recs else "ok"), findings, recs
 
     def _check_schema_drift(self) -> tuple[str, list[str], list[str]]:
         if not self.schema_drift_path.exists():
@@ -177,6 +204,11 @@ class DiagnosticAgent:
             logger.info("%s not found; using built-in roll-rate thresholds", self.thresholds_path)
             return {}
         return (yaml.safe_load(self.thresholds_path.read_text()) or {}).get("roll_rates", {})
+
+    def _load_model_config(self) -> dict[str, Any]:
+        if not self.thresholds_path.exists():
+            return {}
+        return (yaml.safe_load(self.thresholds_path.read_text()) or {}).get("model", {})
 
     def roll_thresholds(self, source: str) -> dict[str, float]:
         """Thresholds for a source: built-ins, then the file's default, then the source's own overrides."""
